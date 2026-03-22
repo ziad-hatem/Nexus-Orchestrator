@@ -17,6 +17,7 @@ type WorkspaceShellProps = {
   memberships: UserOrganizationMembership[];
   canManageMembers: boolean;
   canViewAuditLogs: boolean;
+  canViewExecutions: boolean;
   canViewStreams: boolean;
   user: {
     name: string | null;
@@ -33,6 +34,7 @@ export function WorkspaceShell({
   memberships,
   canManageMembers,
   canViewAuditLogs,
+  canViewExecutions,
   canViewStreams,
   user,
 }: WorkspaceShellProps) {
@@ -76,6 +78,7 @@ export function WorkspaceShell({
             organizationSlug={organizationSlug}
             canManageMembers={canManageMembers}
             canViewAuditLogs={canViewAuditLogs}
+            canViewExecutions={canViewExecutions}
             canViewStreams={canViewStreams}
           />
 

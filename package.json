@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "db:apply-auth-schema": "node scripts/apply-auth-schema.mjs"
+    "db:apply-auth-schema": "node scripts/apply-auth-schema.mjs",
+    "worker:dev": "tsx watch worker/main.ts",
+    "worker:start": "tsx worker/main.ts",
+    "worker:once": "tsx worker/main.ts --once"
   },
   "dependencies": {
     "@radix-ui/react-label": "2.1.2",
@@ -32,6 +35,7 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "resend": "^6.9.3",
+    "server-only": "^0.0.1",
     "sonner": "2.0.3",
     "tailwind-merge": "3.2.0",
     "zod": "^4.3.6",
@@ -46,6 +50,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.1",
     "tailwindcss": "^4",
+    "tsx": "^4.20.6",
     "typescript": "^5"
   }
 }

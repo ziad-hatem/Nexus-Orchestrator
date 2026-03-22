@@ -20,6 +20,8 @@ import type {
   WorkflowIngestionEventSummary,
   WorkflowLifecycleStatus,
   WorkflowPublishedSnapshot,
+  WorkflowRunDetail,
+  WorkflowRunSummary,
   WorkflowSummary,
   WorkflowTriggerDetails,
   WorkflowVersionSummary,
@@ -53,6 +55,13 @@ export type WorkflowDirectoryFilters = {
   query?: string;
   status?: WorkflowLifecycleStatus;
   category?: string;
+};
+
+export type ExecutionDirectoryFilters = {
+  query?: string;
+  status?: WorkflowRunSummary["status"];
+  source?: WorkflowRunSummary["triggerSource"];
+  workflowId?: string;
 };
 
 type WorkspaceStoreState = {
@@ -89,6 +98,12 @@ type WorkspaceStoreState = {
   workflowStreamsTotal: number;
   workflowStreamsPage: number;
   workflowStreamsPageSize: number;
+  executionItems: WorkflowRunSummary[];
+  executionTotal: number;
+  executionPage: number;
+  executionPageSize: number;
+  executionFilters: ExecutionDirectoryFilters;
+  activeExecutionDetail: WorkflowRunDetail | null;
   setSessionUser: (sessionUser: SessionUserState | null) => void;
   setMemberships: (memberships: UserOrganizationMembership[]) => void;
   setWorkspace: (payload: {
@@ -140,6 +155,14 @@ type WorkspaceStoreState = {
     page: number;
     pageSize: number;
   }) => void;
+  setExecutionDirectory: (payload: {
+    items: WorkflowRunSummary[];
+    total: number;
+    page: number;
+    pageSize: number;
+    filters: ExecutionDirectoryFilters;
+  }) => void;
+  setExecutionDetail: (detail: WorkflowRunDetail | null) => void;
   clearWorkspace: () => void;
 };
 
@@ -152,6 +175,7 @@ const emptyProfile: WorkspaceProfile = {
 const emptyTeamFilters: TeamDirectoryFilters = {};
 const emptyAuditFilters: AuditFeedFilters = {};
 const emptyWorkflowFilters: WorkflowDirectoryFilters = {};
+const emptyExecutionFilters: ExecutionDirectoryFilters = {};
 
 const orgScopedInitialState = {
   dashboardSummary: null as DashboardSummary | null,
@@ -180,6 +204,12 @@ const orgScopedInitialState = {
   workflowStreamsTotal: 0,
   workflowStreamsPage: 1,
   workflowStreamsPageSize: 20,
+  executionItems: [] as WorkflowRunSummary[],
+  executionTotal: 0,
+  executionPage: 1,
+  executionPageSize: 20,
+  executionFilters: emptyExecutionFilters,
+  activeExecutionDetail: null as WorkflowRunDetail | null,
 };
 
 const initialState = {
@@ -356,6 +386,22 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set) => ({
       workflowStreamsTotal: payload.total,
       workflowStreamsPage: payload.page,
       workflowStreamsPageSize: payload.pageSize,
+    })),
+  setExecutionDirectory: (payload) =>
+    set((state) => ({
+      ...state,
+      hydrated: true,
+      executionItems: payload.items,
+      executionTotal: payload.total,
+      executionPage: payload.page,
+      executionPageSize: payload.pageSize,
+      executionFilters: payload.filters,
+    })),
+  setExecutionDetail: (detail) =>
+    set((state) => ({
+      ...state,
+      hydrated: true,
+      activeExecutionDetail: detail,
     })),
   clearWorkspace: () => ({
     ...initialState,

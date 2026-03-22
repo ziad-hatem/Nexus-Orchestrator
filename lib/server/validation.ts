@@ -8,6 +8,7 @@ import {
 import {
   WORKFLOW_LIFECYCLE_STATUSES,
   WORKFLOW_NODE_TYPES,
+  WORKFLOW_RUN_STATUSES,
   WORKFLOW_SUPPORTED_TRIGGER_TYPES,
   WORKFLOW_ACTION_TYPES,
   WORKFLOW_CONDITION_BRANCH_KEYS,
@@ -88,6 +89,7 @@ export const workflowActionTypeSchema = z.enum(WORKFLOW_ACTION_TYPES);
 export const workflowConditionBranchKeySchema = z.enum(
   WORKFLOW_CONDITION_BRANCH_KEYS,
 );
+export const workflowRunStatusSchema = z.enum(WORKFLOW_RUN_STATUSES);
 
 const workflowConfigRecordSchema = z.record(z.string(), z.unknown());
 
@@ -293,6 +295,36 @@ export const internalEventIngestionSchema = z.object({
   occurredAt: z
     .string()
     .datetime({ offset: true })
+    .optional()
+    .or(z.literal(""))
+    .transform((value) => (typeof value === "string" && value ? value : undefined)),
+});
+
+export const executionListFilterSchema = z.object({
+  query: z
+    .string()
+    .trim()
+    .max(120)
+    .optional()
+    .transform((value) => (value ? value : undefined)),
+  status: workflowRunStatusSchema.optional(),
+  source: workflowTriggerTypeSchema.optional(),
+  workflowId: workflowIdSchema.optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(50).default(20),
+});
+
+export const executionRunIdSchema = z
+  .string()
+  .trim()
+  .min(4, "Run id is required")
+  .max(64, "Run id is too long");
+
+export const cancelRunSchema = z.object({
+  reason: z
+    .string()
+    .trim()
+    .max(300, "Cancellation reason must be 300 characters or fewer")
     .optional()
     .or(z.literal(""))
     .transform((value) => (typeof value === "string" && value ? value : undefined)),

@@ -17,6 +17,8 @@ export type PermissionSet = {
   canArchiveWorkflows: boolean;
   canTriggerWorkflows: boolean;
   canViewStreams: boolean;
+  canViewExecutions: boolean;
+  canCancelRuns: boolean;
   canManageMembers: boolean;
   canCreateInvites: boolean;
   canViewAuditLogs: boolean;
@@ -33,6 +35,8 @@ const PERMISSIONS_BY_ROLE: Record<OrganizationRole, PermissionSet> = {
     canArchiveWorkflows: true,
     canTriggerWorkflows: true,
     canViewStreams: true,
+    canViewExecutions: true,
+    canCancelRuns: true,
     canManageMembers: true,
     canCreateInvites: true,
     canViewAuditLogs: true,
@@ -47,6 +51,8 @@ const PERMISSIONS_BY_ROLE: Record<OrganizationRole, PermissionSet> = {
     canArchiveWorkflows: true,
     canTriggerWorkflows: true,
     canViewStreams: true,
+    canViewExecutions: true,
+    canCancelRuns: true,
     canManageMembers: false,
     canCreateInvites: false,
     canViewAuditLogs: false,
@@ -61,6 +67,8 @@ const PERMISSIONS_BY_ROLE: Record<OrganizationRole, PermissionSet> = {
     canArchiveWorkflows: false,
     canTriggerWorkflows: true,
     canViewStreams: true,
+    canViewExecutions: true,
+    canCancelRuns: true,
     canManageMembers: false,
     canCreateInvites: false,
     canViewAuditLogs: true,
@@ -75,6 +83,8 @@ const PERMISSIONS_BY_ROLE: Record<OrganizationRole, PermissionSet> = {
     canArchiveWorkflows: false,
     canTriggerWorkflows: false,
     canViewStreams: false,
+    canViewExecutions: true,
+    canCancelRuns: false,
     canManageMembers: false,
     canCreateInvites: false,
     canViewAuditLogs: false,
@@ -134,6 +144,14 @@ export function canTriggerWorkflows(role: OrganizationRole): boolean {
 
 export function canViewStreams(role: OrganizationRole): boolean {
   return getRolePermissions(role).canViewStreams;
+}
+
+export function canViewExecutions(role: OrganizationRole): boolean {
+  return getRolePermissions(role).canViewExecutions;
+}
+
+export function canCancelRuns(role: OrganizationRole): boolean {
+  return getRolePermissions(role).canCancelRuns;
 }
 
 export function canCreateInvites(role: OrganizationRole): boolean {

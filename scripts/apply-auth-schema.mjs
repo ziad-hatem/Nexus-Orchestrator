@@ -15,6 +15,7 @@ const schemaFiles = [
   "db/phase-one-rbac-schema.sql",
   "db/phase-two-workflows-schema.sql",
   "db/phase-three-trigger-ingestion.sql",
+  "db/phase-four-execution-engine.sql",
   "db/mfa-email-schema.sql",
   "db/passkeys-schema.sql",
 ];

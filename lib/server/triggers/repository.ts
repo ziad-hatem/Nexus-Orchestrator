@@ -1,17 +1,16 @@
-import "server-only";
-
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import type {
   TriggerBindingRow,
   WorkflowIngestionEventRow,
-  WorkflowRunRow,
 } from "@/lib/server/triggers/types";
+import type { WorkflowRunRow } from "@/lib/server/executions/types";
 
 type WorkflowLookupRow = {
   id: string;
   workflow_key: string;
   name: string;
   status: string;
+  category: string;
   latest_published_version_number: number | null;
 };
 
@@ -217,9 +216,12 @@ export async function createWorkflowRunRow(params: {
   workflowDbId: string;
   workflowVersionId: string;
   bindingId: string;
+  runKey: string;
+  correlationId: string;
   triggerSource: WorkflowRunRow["trigger_source"];
   sourceContext: unknown;
   payload: unknown;
+  maxAttempts: number;
   idempotencyKey?: string | null;
 }): Promise<WorkflowRunRow> {
   const supabase = getClient();
@@ -230,14 +232,19 @@ export async function createWorkflowRunRow(params: {
       workflow_id: params.workflowDbId,
       workflow_version_id: params.workflowVersionId,
       binding_id: params.bindingId,
+      run_key: params.runKey,
+      correlation_id: params.correlationId,
       status: "pending",
       trigger_source: params.triggerSource,
       source_context: params.sourceContext,
       payload: params.payload,
+      attempt_count: 0,
+      max_attempts: params.maxAttempts,
       idempotency_key: params.idempotencyKey ?? null,
+      updated_at: new Date().toISOString(),
     })
     .select(
-      "id, organization_id, workflow_id, workflow_version_id, binding_id, status, trigger_source, source_context, payload, idempotency_key, created_by_event_id, created_at",
+      "id, organization_id, workflow_id, workflow_version_id, binding_id, run_key, correlation_id, status, trigger_source, source_context, payload, idempotency_key, created_by_event_id, attempt_count, max_attempts, started_at, completed_at, cancel_requested_at, cancelled_at, last_heartbeat_at, failure_code, failure_message, created_at, updated_at",
     )
     .single<WorkflowRunRow>();
 
@@ -387,7 +394,7 @@ export async function listWorkflowRowsByIds(
   const supabase = getClient();
   const { data, error } = await supabase
     .from("workflows")
-    .select("id, workflow_key, name, status, latest_published_version_number")
+    .select("id, workflow_key, name, status, category, latest_published_version_number")
     .in("id", Array.from(new Set(workflowDbIds)))
     .returns<WorkflowLookupRow[]>();
 

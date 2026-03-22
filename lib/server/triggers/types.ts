@@ -1,9 +1,6 @@
-import "server-only";
-
 import type {
   InternalEventKey,
   WorkflowIngestionStatus,
-  WorkflowRunStatus,
   WorkflowSourceContext,
   WorkflowTriggerSource,
 } from "@/lib/server/workflows/types";
@@ -29,22 +26,8 @@ export type TriggerBindingWorkflowRow = TriggerBindingRow & {
   workflow_key: string;
   workflow_name: string;
   workflow_status: string;
+  category?: string | null;
   latest_published_version_number: number | null;
-};
-
-export type WorkflowRunRow = {
-  id: string;
-  organization_id: string;
-  workflow_id: string;
-  workflow_version_id: string;
-  binding_id: string;
-  status: WorkflowRunStatus;
-  trigger_source: WorkflowTriggerSource;
-  source_context: unknown;
-  payload: unknown;
-  idempotency_key: string | null;
-  created_by_event_id: string | null;
-  created_at: string;
 };
 
 export type WorkflowIngestionEventRow = {

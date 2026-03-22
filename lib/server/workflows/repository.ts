@@ -1,5 +1,3 @@
-import "server-only";
-
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import type { WorkflowLifecycleStatus } from "@/lib/server/workflows/types";
 
@@ -354,6 +352,25 @@ export async function getWorkflowVersionRow(params: {
 
   if (error) {
     throw new Error(`Failed to load workflow version: ${error.message}`);
+  }
+
+  return data ?? null;
+}
+
+export async function getWorkflowVersionRowById(
+  versionDbId: string,
+): Promise<WorkflowVersionRow | null> {
+  const supabase = getClient();
+  const { data, error } = await supabase
+    .from("workflow_versions")
+    .select(
+      "id, workflow_id, organization_id, version_number, metadata, config, canvas, validation_issues, publish_notes, published_by, created_at",
+    )
+    .eq("id", versionDbId)
+    .maybeSingle<WorkflowVersionRow>();
+
+  if (error) {
+    throw new Error(`Failed to load workflow version by id: ${error.message}`);
   }
 
   return data ?? null;

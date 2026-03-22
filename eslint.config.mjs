@@ -15,6 +15,7 @@ const eslintConfig = defineConfig([
     "exports/**",
     "phase 2 pages/**",
     "phase 3 pages/**",
+    "phase 4 pages/**",
   ]),
 ]);
 

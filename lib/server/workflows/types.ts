@@ -40,6 +40,15 @@ export const WORKFLOW_CONDITION_BRANCH_KEYS = [
   "false",
 ] as const;
 
+export const WORKFLOW_RUN_STATUSES = [
+  "pending",
+  "running",
+  "success",
+  "failed",
+  "retrying",
+  "cancelled",
+] as const;
+
 export const INTERNAL_EVENT_KEYS = [
   "ticket.created",
   "payment.failed",
@@ -57,6 +66,7 @@ export type WorkflowActionType =
   (typeof WORKFLOW_ACTION_TYPES)[number];
 export type WorkflowConditionBranchKey =
   (typeof WORKFLOW_CONDITION_BRANCH_KEYS)[number];
+export type WorkflowRunStatus = (typeof WORKFLOW_RUN_STATUSES)[number];
 export type InternalEventKey = (typeof INTERNAL_EVENT_KEYS)[number];
 export type ValidationSeverity = "error" | "warning";
 export type WorkflowTriggerSource = SupportedWorkflowTriggerType;
@@ -65,7 +75,6 @@ export type WorkflowIngestionStatus =
   | "rejected"
   | "duplicate"
   | "rate_limited";
-export type WorkflowRunStatus = "pending";
 
 export type WorkflowMetadata = {
   name: string;
@@ -228,6 +237,7 @@ export type WorkflowPendingRunSummary = {
   workflowVersionNumber: number;
   triggerSource: WorkflowTriggerSource;
   status: WorkflowRunStatus;
+  correlationId: string;
   createdAt: string;
   idempotencyKey: string | null;
 };
@@ -284,6 +294,71 @@ export type WorkflowTriggerDetails = {
   canTriggerManually: boolean;
   trigger: WorkflowTriggerSummary;
   recentAttempts: WorkflowIngestionEventSummary[];
+};
+
+export type WorkflowRunSummary = {
+  runId: string;
+  workflowId: string;
+  workflowName: string;
+  workflowCategory: string;
+  workflowStatus: string;
+  workflowVersionNumber: number;
+  triggerSource: WorkflowTriggerSource;
+  status: WorkflowRunStatus;
+  correlationId: string;
+  attemptCount: number;
+  maxAttempts: number;
+  startedAt: string | null;
+  completedAt: string | null;
+  cancelledAt: string | null;
+  createdAt: string;
+  lastHeartbeatAt: string | null;
+  failureCode: string | null;
+  failureMessage: string | null;
+  idempotencyKey: string | null;
+};
+
+export type WorkflowRunStepStatus =
+  | "pending"
+  | "running"
+  | "success"
+  | "failed"
+  | "cancelled"
+  | "skipped";
+
+export type WorkflowRunStepRecord = {
+  stepId: string;
+  nodeId: string;
+  nodeType: string;
+  nodeLabel: string;
+  sequenceNumber: number;
+  attemptNumber: number;
+  branchTaken: WorkflowConditionBranchKey | null;
+  status: WorkflowRunStepStatus;
+  correlationId: string;
+  inputPayload: Record<string, unknown>;
+  outputPayload: Record<string, unknown>;
+  errorCode: string | null;
+  errorMessage: string | null;
+  logs: Array<Record<string, unknown>>;
+  startedAt: string | null;
+  completedAt: string | null;
+};
+
+export type WorkflowRunDetail = WorkflowRunSummary & {
+  sourceContext: WorkflowSourceContext;
+  payload: Record<string, unknown>;
+  createdByEventId: string | null;
+  cancelRequestedAt: string | null;
+  versionValidationIssues: ValidationIssue[];
+  recentEvent: {
+    eventId: string;
+    status: WorkflowIngestionStatus;
+    eventKey: InternalEventKey | null;
+    createdAt: string;
+  } | null;
+  steps: WorkflowRunStepRecord[];
+  triggerActor: WorkflowActor | null;
 };
 
 type WorkflowCanvasNodeDescriptor = Omit<WorkflowCanvasNode, "position">;
@@ -376,6 +451,19 @@ export function createWorkflowPublicId(): string {
     ?.toUpperCase();
 
   return `WFL-${raw ?? "0000"}`;
+}
+
+export function createWorkflowRunPublicId(): string {
+  const raw = createWorkflowEntityId("run")
+    .replace(/^run-/, "")
+    .split("-")[0]
+    ?.toUpperCase();
+
+  return `RUN-${raw ?? "0000"}`;
+}
+
+export function createWorkflowCorrelationId(): string {
+  return createWorkflowEntityId("corr").replace(/^corr-/, "corr_");
 }
 
 export function isWorkflowActionType(value: unknown): value is WorkflowActionType {

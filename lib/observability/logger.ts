@@ -1,5 +1,3 @@
-import "server-only";
-
 import { randomUUID } from "node:crypto";
 import pino, { type Logger } from "pino";
 import { getOptionalEnv } from "@/lib/env";

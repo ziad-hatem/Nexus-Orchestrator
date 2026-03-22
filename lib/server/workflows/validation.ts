@@ -6,6 +6,7 @@ import {
   type WorkflowCanvasEdge,
   type WorkflowDraftDocument,
 } from "@/lib/server/workflows/types";
+import { tryParseConditionExpression } from "@/lib/server/executions/condition-dsl";
 import { normalizeWebhookPath } from "@/lib/server/validation";
 
 function pushIssue(
@@ -277,6 +278,16 @@ export function validateWorkflowDraftDocument(
         message: "Condition expression is required.",
         severity: "error",
       });
+    } else {
+      const parsedExpression = tryParseConditionExpression(condition.expression);
+      if (!parsedExpression.success) {
+        pushIssue(issues, {
+          path: `config.conditions.${condition.id}.expression`,
+          code: "invalid_condition_expression",
+          message: parsedExpression.error,
+          severity: "error",
+        });
+      }
     }
   });
 
@@ -428,6 +439,15 @@ export function validateWorkflowDraftDocument(
         path: `canvas.nodes.${triggerNode.id}.outgoing`,
         code: "missing_trigger_outgoing_edge",
         message: "The trigger must connect to at least one downstream node.",
+        severity: "error",
+      });
+    }
+    if ((outgoingCounts.get(triggerNode.id) ?? 0) > 1) {
+      pushIssue(issues, {
+        path: `canvas.nodes.${triggerNode.id}.outgoing`,
+        code: "invalid_trigger_outgoing_count",
+        message:
+          "Trigger nodes must connect exactly one downstream path in this phase.",
         severity: "error",
       });
     }

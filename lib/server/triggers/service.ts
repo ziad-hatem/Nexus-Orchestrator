@@ -49,7 +49,15 @@ import {
   type WorkflowVersionRow,
 } from "@/lib/server/workflows/repository";
 import {
+  getExecutionMaxRetries,
+} from "@/lib/server/executions/queue";
+import {
+  enqueueWorkflowRunForExecution,
+} from "@/lib/server/executions/service";
+import {
   normalizeWorkflowDraftDocument,
+  createWorkflowCorrelationId,
+  createWorkflowRunPublicId,
   type InternalEventKey,
   type WorkflowIngestionEventSummary,
   type WorkflowPendingRunSummary,
@@ -385,9 +393,12 @@ async function createAcceptedIngestionWithRun(params: {
     workflowDbId: params.binding.workflow_id,
     workflowVersionId: params.binding.workflow_version_id,
     bindingId: params.binding.id,
+    runKey: createWorkflowRunPublicId(),
+    correlationId: createWorkflowCorrelationId(),
     triggerSource: params.binding.source_type,
     sourceContext: params.sourceContext,
     payload: params.payload,
+    maxAttempts: getExecutionMaxRetries(),
     idempotencyKey: params.idempotencyKey ?? null,
   });
 
@@ -400,6 +411,10 @@ async function createAcceptedIngestionWithRun(params: {
       runId: run.id,
       eventId: event.id,
     }),
+    enqueueWorkflowRunForExecution({
+      run,
+      reason: "trigger",
+    }),
   ]);
 
   return {
@@ -408,12 +423,13 @@ async function createAcceptedIngestionWithRun(params: {
       run_id: run.id,
     },
     run: {
-      runId: run.id,
+      runId: run.run_key,
       workflowId: workflowLookup.workflow_key,
       workflowName: workflowLookup.name,
       workflowVersionNumber: versionLookup.version_number,
       triggerSource: run.trigger_source,
       status: run.status,
+      correlationId: run.correlation_id,
       createdAt: run.created_at,
       idempotencyKey: run.idempotency_key,
     },

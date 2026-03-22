@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   GitBranch,
   LayoutDashboard,
+  ListChecks,
   Radio,
   ShieldCheck,
   UserRound,
@@ -48,11 +49,13 @@ export function WorkspaceNav({
   organizationSlug,
   canManageMembers,
   canViewAuditLogs,
+  canViewExecutions,
   canViewStreams,
 }: {
   organizationSlug: string;
   canManageMembers: boolean;
   canViewAuditLogs: boolean;
+  canViewExecutions: boolean;
   canViewStreams: boolean;
 }) {
   const pathname = usePathname();
@@ -92,6 +95,15 @@ export function WorkspaceNav({
             href: `${basePath}/streams`,
             label: "Streams",
             icon: Radio,
+          },
+        ]
+      : []),
+    ...(canViewExecutions
+      ? [
+          {
+            href: `${basePath}/executions`,
+            label: "Executions",
+            icon: ListChecks,
           },
         ]
       : []),
