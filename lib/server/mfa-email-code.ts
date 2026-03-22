@@ -20,12 +20,12 @@ export async function sendMfaEmailCode(
 ): Promise<void> {
   const resend = new Resend(getRequiredEnv("RESEND_API_KEY"));
   const fromAddress =
-    process.env.RESEND_FROM_EMAIL ?? "OpsDesk <onboarding@resend.dev>";
+    process.env.RESEND_FROM_EMAIL ?? "Nexus Orchestrator <onboarding@resend.dev>";
 
   const { error } = await resend.emails.send({
     from: fromAddress,
     to: [params.toEmail],
-    subject: `Your OpsDesk verification code: ${params.code}`,
+    subject: `Your Nexus Orchestrator verification code: ${params.code}`,
     react: await MfaVerificationCodeEmail({
       email: params.toEmail,
       code: params.code,

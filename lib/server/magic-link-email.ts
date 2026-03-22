@@ -19,12 +19,12 @@ export async function sendMagicLinkEmail(
 ): Promise<void> {
   const resend = new Resend(getRequiredEnv("RESEND_API_KEY"));
   const fromAddress =
-    process.env.RESEND_FROM_EMAIL ?? "OpsDesk <onboarding@resend.dev>";
+    process.env.RESEND_FROM_EMAIL ?? "Nexus Orchestrator <onboarding@resend.dev>";
 
   const { error } = await resend.emails.send({
     from: fromAddress,
     to: [params.toEmail],
-    subject: "Your OpsDesk magic sign-in link",
+    subject: "Your Nexus Orchestrator magic sign-in link",
     react: await MagicLinkEmail({
       email: params.toEmail,
       magicLink: params.magicLink,

@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import {
-  ArrowRight,
   Fingerprint,
   Info,
   Loader2,
@@ -9,6 +8,7 @@ import {
   RefreshCw,
   ShieldCheck,
 } from "lucide-react";
+import { FormStatusMessage } from "@/app/components/a11y/form-status-message";
 import { Button } from "../ui/button";
 import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from "../ui/input-otp";
 import { AuthPanel } from "./auth-shell";
@@ -82,7 +82,7 @@ export function MagicLinkPanel({
             {description}
           </p>
           {email ? (
-            <p className="mt-4 text-sm font-semibold text-[var(--on-surface)]">
+            <p className="mt-4 text-sm font-semibold text-[var(--on-surface)]" role="status" aria-live="polite">
               Sent to {email}
             </p>
           ) : null}
@@ -150,57 +150,66 @@ export function MfaPanel({
         {description}
       </p>
 
-      {info ? (
-        <div className="mt-5 rounded-2xl bg-[var(--surface-container-low)] px-4 py-3 text-sm text-[var(--on-surface-variant)]">
-          {info}
-        </div>
-      ) : null}
-
-      {error ? (
-        <div className="mt-4 rounded-2xl bg-[var(--error-container)] px-4 py-3 text-sm font-medium text-[var(--error)]">
-          {error}
-        </div>
-      ) : null}
+      <FormStatusMessage
+        id="mfa-info"
+        message={info}
+        tone="info"
+        className="mt-5"
+      />
+      <FormStatusMessage
+        id="mfa-error"
+        message={error}
+        tone="error"
+        className="mt-4"
+      />
 
       <div className="mt-8 flex justify-center">
+        <label htmlFor="mfa-code-input" className="sr-only">
+          Enter the six digit email verification code
+        </label>
         <InputOTP
+          id="mfa-code-input"
           maxLength={6}
           value={code}
           onChange={(value) => onCodeChange(value.replace(/\D/g, "").slice(0, 6))}
           containerClassName="items-center gap-2"
           disabled={verifyDisabled || resendDisabled}
+          aria-describedby="mfa-info mfa-error mfa-help-text"
         >
           <InputOTPGroup className="gap-2">
             <InputOTPSlot
               index={0}
-              className="h-14 w-12 rounded-xl border border-[rgba(192,199,211,0.3)] bg-[var(--surface-container-low)] text-xl font-semibold first:rounded-xl first:border last:rounded-xl"
+              className="h-14 w-12 rounded-xl border border-[color:color-mix(in_srgb,var(--outline-variant)_56%,transparent)] bg-[var(--surface-container-low)] text-xl font-semibold first:rounded-xl first:border last:rounded-xl"
             />
             <InputOTPSlot
               index={1}
-              className="h-14 w-12 rounded-xl border border-[rgba(192,199,211,0.3)] bg-[var(--surface-container-low)] text-xl font-semibold first:rounded-xl first:border last:rounded-xl"
+              className="h-14 w-12 rounded-xl border border-[color:color-mix(in_srgb,var(--outline-variant)_56%,transparent)] bg-[var(--surface-container-low)] text-xl font-semibold first:rounded-xl first:border last:rounded-xl"
             />
             <InputOTPSlot
               index={2}
-              className="h-14 w-12 rounded-xl border border-[rgba(192,199,211,0.3)] bg-[var(--surface-container-low)] text-xl font-semibold first:rounded-xl first:border last:rounded-xl"
+              className="h-14 w-12 rounded-xl border border-[color:color-mix(in_srgb,var(--outline-variant)_56%,transparent)] bg-[var(--surface-container-low)] text-xl font-semibold first:rounded-xl first:border last:rounded-xl"
             />
           </InputOTPGroup>
           <InputOTPSeparator className="mx-1 text-[var(--outline-variant)] [&_svg]:h-4 [&_svg]:w-4" />
           <InputOTPGroup className="gap-2">
             <InputOTPSlot
               index={3}
-              className="h-14 w-12 rounded-xl border border-[rgba(192,199,211,0.3)] bg-[var(--surface-container-low)] text-xl font-semibold first:rounded-xl first:border last:rounded-xl"
+              className="h-14 w-12 rounded-xl border border-[color:color-mix(in_srgb,var(--outline-variant)_56%,transparent)] bg-[var(--surface-container-low)] text-xl font-semibold first:rounded-xl first:border last:rounded-xl"
             />
             <InputOTPSlot
               index={4}
-              className="h-14 w-12 rounded-xl border border-[rgba(192,199,211,0.3)] bg-[var(--surface-container-low)] text-xl font-semibold first:rounded-xl first:border last:rounded-xl"
+              className="h-14 w-12 rounded-xl border border-[color:color-mix(in_srgb,var(--outline-variant)_56%,transparent)] bg-[var(--surface-container-low)] text-xl font-semibold first:rounded-xl first:border last:rounded-xl"
             />
             <InputOTPSlot
               index={5}
-              className="h-14 w-12 rounded-xl border border-[rgba(192,199,211,0.3)] bg-[var(--surface-container-low)] text-xl font-semibold first:rounded-xl first:border last:rounded-xl"
+              className="h-14 w-12 rounded-xl border border-[color:color-mix(in_srgb,var(--outline-variant)_56%,transparent)] bg-[var(--surface-container-low)] text-xl font-semibold first:rounded-xl first:border last:rounded-xl"
             />
           </InputOTPGroup>
         </InputOTP>
       </div>
+      <p id="mfa-help-text" className="mt-3 text-xs text-[var(--on-surface-variant)]">
+        Enter the code exactly as shown in your email. It expires shortly after delivery.
+      </p>
 
       <Button
         type="button"
@@ -242,7 +251,7 @@ export function MfaPanel({
         ) : null}
         {onAlternative ? (
           <>
-            <div className="h-px w-12 bg-[rgba(192,199,211,0.35)]" />
+            <div className="h-px w-12 bg-[color:color-mix(in_srgb,var(--outline-variant)_56%,transparent)]" />
             <Button
               type="button"
               variant="ghost"
@@ -256,7 +265,7 @@ export function MfaPanel({
         ) : null}
       </div>
 
-      <div className="mt-10 flex items-center justify-center gap-2 border-t border-[rgba(192,199,211,0.18)] pt-8 text-[11px] font-medium uppercase tracking-[0.12em] text-[color:rgba(95,107,124,0.7)]">
+      <div className="mt-10 flex items-center justify-center gap-2 border-t border-[color:color-mix(in_srgb,var(--outline-variant)_48%,transparent)] pt-8 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--on-surface-variant)]">
         <ShieldCheck className="h-3.5 w-3.5" />
         <span>End-to-End Encrypted Session</span>
       </div>
@@ -292,10 +301,10 @@ export function PasskeyStatusPanel({
           <h2 className="text-2xl font-bold tracking-[-0.02em] text-[var(--on-surface)]">
             {title}
           </h2>
-          <p className="mt-3 body-md text-[var(--on-surface-variant)]">
+          <p className="mt-3 body-md text-[var(--on-surface-variant)]" role="status" aria-live="polite">
             {description}
           </p>
-          <div className="mt-8 rounded-2xl border border-[rgba(192,199,211,0.12)] bg-[var(--surface-container-low)] p-5">
+          <div className="mt-8 rounded-2xl border border-[color:color-mix(in_srgb,var(--outline-variant)_40%,transparent)] bg-[var(--surface-container-low)] p-5">
             <div className="flex items-center gap-4">
               <div className="relative">
                 <Fingerprint className="relative z-10 h-5 w-5 text-primary" />
@@ -305,7 +314,7 @@ export function PasskeyStatusPanel({
                 <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--on-surface-variant)]">
                   System Status
                 </span>
-                <p className="mt-1 text-sm font-medium text-[var(--on-surface)]">
+                <p className="mt-1 text-sm font-medium text-[var(--on-surface)]" role="status" aria-live="polite">
                   {status}
                 </p>
               </div>
@@ -343,7 +352,7 @@ export function AsyncStatePanel({
   className,
 }: AsyncStatePanelProps) {
   return (
-    <AuthPanel className={cn("mx-auto max-w-md text-center", className)}>
+    <AuthPanel className={cn("mx-auto max-w-md text-center", className)} role="status" aria-live="polite">
       <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--surface-container-low)] text-primary">
         {icon ?? <Info className="h-6 w-6" />}
       </div>

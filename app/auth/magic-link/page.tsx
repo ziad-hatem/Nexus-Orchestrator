@@ -1,13 +1,21 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
+import { Info, Loader2, TriangleAlert } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Loader2, TriangleAlert } from "lucide-react";
 import { signIn } from "next-auth/react";
-import { Button } from "@/app/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/app/components/ui/card";
-import { Input } from "@/app/components/ui/input";
-import { Label } from "@/app/components/ui/label";
+import {
+  AuthBrand,
+  AuthCanvas,
+  AuthFooterMeta,
+} from "@/app/components/auth/auth-shell";
+import {
+  AsyncStatePanel,
+  MagicLinkPanel,
+  MfaPanel,
+  VerificationHelpText,
+} from "@/app/components/auth/auth-verification-panels";
+import { safeRedirectPath } from "@/lib/redirect-path";
 import { supabase } from "@/lib/supabase";
 
 type CompletionState = {
@@ -42,7 +50,10 @@ function mapAuthError(errorMessage: string, code?: string | null): string {
   return errorMessage;
 }
 
-function readAuthErrorCode(result: { code?: string | null; url?: string | null }): string | null {
+function readAuthErrorCode(result: {
+  code?: string | null;
+  url?: string | null;
+}): string | null {
   if (result.code) {
     return result.code;
   }
@@ -135,6 +146,17 @@ function MagicLinkCallbackContent() {
   const [isResendingMfa, setIsResendingMfa] = useState(false);
 
   const queryString = useMemo(() => searchParams.toString(), [searchParams]);
+  const redirectPath = useMemo(
+    () => safeRedirectPath(searchParams.get("next")) ?? "/",
+    [searchParams],
+  );
+  const loginPath = useMemo(() => {
+    if (redirectPath === "/") {
+      return "/login";
+    }
+
+    return `/login?${new URLSearchParams({ next: redirectPath }).toString()}`;
+  }, [redirectPath]);
 
   useEffect(() => {
     let isMounted = true;
@@ -148,7 +170,9 @@ function MagicLinkCallbackContent() {
         let refreshToken: string | null = null;
 
         if (code) {
-          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+          const { data, error } = await supabase.auth.exchangeCodeForSession(
+            code,
+          );
           if (error || !data.session?.access_token || !data.session.refresh_token) {
             throw new Error(error?.message ?? "Magic link code exchange failed");
           }
@@ -211,12 +235,10 @@ function MagicLinkCallbackContent() {
             await supabase.auth.signOut();
           }
 
-          throw new Error(
-            mapAuthError(signInResult.error, signInErrorCode),
-          );
+          throw new Error(mapAuthError(signInResult.error, signInErrorCode));
         }
 
-        router.replace("/");
+        router.replace(redirectPath);
       } catch (error: unknown) {
         if (!isMounted) {
           return;
@@ -236,12 +258,12 @@ function MagicLinkCallbackContent() {
     return () => {
       isMounted = false;
     };
-  }, [queryString, router]);
+  }, [queryString, redirectPath, router]);
 
   const handleVerifyMfa = async () => {
     if (!pendingTokens) {
-      setState((prev) => ({
-        ...prev,
+      setState((previous) => ({
+        ...previous,
         error: "Authentication session is missing. Restart sign-in.",
       }));
       return;
@@ -249,15 +271,15 @@ function MagicLinkCallbackContent() {
 
     const trimmedCode = mfaCode.trim();
     if (!/^\d{6}$/.test(trimmedCode)) {
-      setState((prev) => ({
-        ...prev,
+      setState((previous) => ({
+        ...previous,
         error: "Enter the 6-digit verification code from your email.",
       }));
       return;
     }
 
     setIsVerifyingMfa(true);
-    setState((prev) => ({ ...prev, error: null }));
+    setState((previous) => ({ ...previous, error: null }));
 
     try {
       const mfaAssertion = await verifyMfaCode({
@@ -280,10 +302,10 @@ function MagicLinkCallbackContent() {
         throw new Error(mapAuthError(retryResult.error, retryCode));
       }
 
-      router.replace("/");
+      router.replace(redirectPath);
     } catch (error: unknown) {
-      setState((prev) => ({
-        ...prev,
+      setState((previous) => ({
+        ...previous,
         error: getErrorMessage(error, "Failed to verify MFA code"),
       }));
     } finally {
@@ -293,26 +315,26 @@ function MagicLinkCallbackContent() {
 
   const handleResendMfa = async () => {
     if (!pendingTokens) {
-      setState((prev) => ({
-        ...prev,
+      setState((previous) => ({
+        ...previous,
         error: "Authentication session is missing. Restart sign-in.",
       }));
       return;
     }
 
     setIsResendingMfa(true);
-    setState((prev) => ({ ...prev, error: null }));
+    setState((previous) => ({ ...previous, error: null }));
 
     try {
       const response = await sendMfaCode(pendingTokens.accessToken);
-      setState((prev) => ({
-        ...prev,
+      setState((previous) => ({
+        ...previous,
         info: response.message ?? "Verification code sent to your email.",
-        email: response.email ?? prev.email,
+        email: response.email ?? previous.email,
       }));
     } catch (error: unknown) {
-      setState((prev) => ({
-        ...prev,
+      setState((previous) => ({
+        ...previous,
         error: getErrorMessage(error, "Failed to resend verification code"),
       }));
     } finally {
@@ -322,133 +344,114 @@ function MagicLinkCallbackContent() {
 
   const handleBackToLogin = async () => {
     await supabase.auth.signOut();
-    router.replace("/login");
+    router.replace(loginPath);
+  };
+
+  const handleOpenMailApp = () => {
+    if (typeof window !== "undefined") {
+      window.location.href = "mailto:";
+    }
   };
 
   if (state.isLoading) {
     return (
-      <div className="min-h-screen bg-muted/50 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle>Signing You In</CardTitle>
-            <CardDescription>Validating your magic link...</CardDescription>
-          </CardHeader>
-          <CardContent className="flex items-center text-muted-foreground">
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            Completing login, please wait.
-          </CardContent>
-        </Card>
-      </div>
+      <AuthCanvas>
+        <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-md flex-col">
+          <AsyncStatePanel
+            title="Signing you in"
+            description="Validating your magic link and completing sign-in..."
+            icon={<Loader2 className="h-6 w-6 animate-spin" />}
+          />
+          <AuthFooterMeta className="pt-8" />
+        </div>
+      </AuthCanvas>
     );
   }
 
   if (state.requiresMfa) {
     return (
-      <div className="min-h-screen bg-muted/50 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle>Verify Your Sign-In</CardTitle>
-            <CardDescription>
-              Enter the 6-digit code sent to {state.email ?? "your email"}.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {state.info ? <p className="text-sm text-muted-foreground">{state.info}</p> : null}
-            {state.error ? <p className="text-sm text-red-600">{state.error}</p> : null}
+      <AuthCanvas>
+        <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-md flex-col">
+          <MfaPanel
+            description={`We've sent a 6-digit verification code to ${state.email ?? "your registered email"}. Enter the code below to continue.`}
+            code={mfaCode}
+            info={state.info}
+            error={state.error}
+            onCodeChange={setMfaCode}
+            onVerify={handleVerifyMfa}
+            onResend={handleResendMfa}
+            onAlternative={() => void handleBackToLogin()}
+            verifyDisabled={isVerifyingMfa || isResendingMfa}
+            resendDisabled={isVerifyingMfa || isResendingMfa}
+            alternativeDisabled={isVerifyingMfa || isResendingMfa}
+            isVerifying={isVerifyingMfa}
+            isResending={isResendingMfa}
+            alternativeLabel="Back to login"
+          />
+          <AuthFooterMeta className="pt-8" />
+        </div>
+      </AuthCanvas>
+    );
+  }
 
-            <div className="space-y-2">
-              <Label htmlFor="mfa-code">Verification Code</Label>
-              <Input
-                id="mfa-code"
-                value={mfaCode}
-                onChange={(event) => setMfaCode(event.target.value)}
-                placeholder="123456"
-                maxLength={6}
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                disabled={isVerifyingMfa || isResendingMfa}
-              />
-            </div>
-
-            <div className="flex gap-2">
-              <Button
-                className="flex-1"
-                onClick={handleVerifyMfa}
-                disabled={isVerifyingMfa || isResendingMfa}
-              >
-                {isVerifyingMfa ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Verifying...
-                  </>
-                ) : (
-                  "Verify and Continue"
-                )}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={handleResendMfa}
-                disabled={isVerifyingMfa || isResendingMfa}
-              >
-                {isResendingMfa ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Sending...
-                  </>
-                ) : (
-                  "Resend"
-                )}
-              </Button>
-            </div>
-
-            <Button
-              variant="ghost"
-              className="w-full"
-              onClick={() => void handleBackToLogin()}
-              disabled={isVerifyingMfa || isResendingMfa}
-            >
-              Back to Login
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+  if (!state.error) {
+    return (
+      <AuthCanvas>
+        <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-3xl flex-col">
+          <AuthBrand className="mb-10" />
+          <MagicLinkPanel
+            className="mx-auto max-w-2xl"
+            description="We've sent a magic link to your registered email address. Use it to sign in securely without a password."
+            email={state.email}
+            onPrimaryAction={handleOpenMailApp}
+            onSecondaryAction={() => router.replace(loginPath)}
+            secondaryActionLabel="Back to Login"
+          />
+          <VerificationHelpText />
+          <AuthFooterMeta className="pt-8" />
+        </div>
+      </AuthCanvas>
     );
   }
 
   return (
-    <div className="min-h-screen bg-muted/50 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TriangleAlert className="h-5 w-5 text-red-500" />
-            Magic Link Failed
-          </CardTitle>
-          <CardDescription>
-            {state.error ?? "The sign-in link is invalid or has expired."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex justify-end">
-          <Button onClick={() => router.replace("/login")}>Back to Login</Button>
-        </CardContent>
-      </Card>
-    </div>
+    <AuthCanvas>
+      <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-md flex-col">
+        <AsyncStatePanel
+          title="Magic link failed"
+          description={state.error}
+          icon={<TriangleAlert className="h-6 w-6 text-[var(--error)]" />}
+        />
+        <div className="mt-6 text-center">
+          <button
+            type="button"
+            className="rounded-full bg-[var(--surface-container-low)] px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-[var(--surface-container)]"
+            onClick={() => router.replace(loginPath)}
+          >
+            Back to Login
+          </button>
+        </div>
+        <div className="mt-4 flex items-center justify-center gap-2 text-sm text-[var(--on-surface-variant)]">
+          <Info className="h-4 w-4" />
+          Re-request a fresh sign-in link if this one expired.
+        </div>
+        <AuthFooterMeta className="pt-8" />
+      </div>
+    </AuthCanvas>
   );
 }
 
 function MagicLinkCallbackFallback() {
   return (
-    <div className="min-h-screen bg-muted/50 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Loading Magic Link</CardTitle>
-          <CardDescription>Preparing your sign-in link...</CardDescription>
-        </CardHeader>
-        <CardContent className="flex items-center text-muted-foreground">
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          Loading, please wait.
-        </CardContent>
-      </Card>
-    </div>
+    <AuthCanvas>
+      <div className="mx-auto max-w-md">
+        <AsyncStatePanel
+          title="Loading magic link"
+          description="Preparing your secure sign-in callback."
+          icon={<Loader2 className="h-6 w-6 animate-spin" />}
+        />
+      </div>
+    </AuthCanvas>
   );
 }
 
@@ -459,4 +462,3 @@ export default function MagicLinkCallbackPage() {
     </Suspense>
   );
 }
-

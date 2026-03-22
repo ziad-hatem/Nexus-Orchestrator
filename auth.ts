@@ -1,12 +1,16 @@
 import NextAuth from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { CredentialsSignin } from "next-auth";
+import { createChildLogger } from "@/lib/observability/logger";
 import { supabase } from "./lib/supabase";
 import { createSupabaseAdminClient } from "./lib/supabase-admin";
+import { ensureAuthUserAppBootstrap } from "@/lib/server/auth-bootstrap";
 import { loadMembershipAccessSummary } from "./lib/server/membership-access";
 import { verifyMfaAssertionToken } from "./lib/server/mfa-assertion";
 import { verifyPasskeyAssertionToken } from "./lib/server/passkey-assertion";
 import { normalizeAvatarUrl } from "./lib/avatar-url";
+
+const authLogger = createChildLogger({ module: "auth" });
 
 class InvalidCredentials extends CredentialsSignin {
   code = "Invalid email or password";
@@ -37,8 +41,12 @@ async function assertHasActiveMembership(userId: string): Promise<void> {
   const accessResult = await loadMembershipAccessSummary(supabaseAdmin, userId);
 
   if (accessResult.error) {
-    console.error(
-      `[auth] failed to load membership access summary for ${userId}: ${accessResult.error}`,
+    authLogger.error(
+      {
+        userId,
+        error: accessResult.error,
+      },
+      "Failed to load membership access summary",
     );
     return;
   }
@@ -70,6 +78,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           throw new InvalidCredentials();
         }
 
+        await ensureAuthUserAppBootstrap(data.user);
         await assertHasActiveMembership(data.user.id);
         if (isMultiStepAuthEnabled(data.user.user_metadata)) {
           throw new MfaRequired();
@@ -116,6 +125,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
 
+        await ensureAuthUserAppBootstrap(data.user);
         await assertHasActiveMembership(data.user.id);
         if (isMultiStepAuthEnabled(data.user.user_metadata)) {
           const isVerified = mfaAssertion
@@ -175,6 +185,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
 
         const authUser = authUserResult.user;
+        await ensureAuthUserAppBootstrap(authUser);
         await assertHasActiveMembership(authUser.id);
 
         const firstName = authUser.user_metadata?.first_name as

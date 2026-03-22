@@ -2,23 +2,15 @@ import {
   createClient,
   type SupabaseClient,
 } from "@supabase/supabase-js";
-
-function getRequiredEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(`Missing required environment variable: ${name}`);
-  }
-
-  return value;
-}
+import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/env";
 
 let client: SupabaseClient | null = null;
 
 function getSupabaseClient(): SupabaseClient {
   if (!client) {
     client = createClient(
-      getRequiredEnv("NEXT_PUBLIC_SUPABASE_URL"),
-      getRequiredEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
+      getSupabaseUrl(),
+      getSupabaseAnonKey(),
     );
   }
 

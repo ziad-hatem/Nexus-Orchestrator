@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { createRequestLogger, writeLog } from "@/lib/observability/logger";
+import { handleRouteError } from "@/lib/observability/route-handler";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { normalizeAvatarUrl } from "@/lib/avatar-url";
 
@@ -77,6 +79,11 @@ function storagePathFromPublicUrl(url: string | null, bucket: string): string | 
 
 export async function POST(req: Request) {
   const session = await auth();
+  const logger = createRequestLogger(req, {
+    route: "api.me.avatar.post",
+    userId: session?.user?.id ?? null,
+    email: session?.user?.email ?? null,
+  });
   if (!session?.user?.id || !session.user.email) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -219,7 +226,10 @@ export async function POST(req: Request) {
         .from(AVATAR_BUCKET)
         .remove([oldAvatarPath]);
       if (removeError) {
-        console.warn(`Failed to remove old avatar "${oldAvatarPath}": ${removeError.message}`);
+        writeLog(logger, "warn", "Failed to remove previous avatar file", {
+          oldAvatarPath,
+          error: removeError.message,
+        });
       }
     }
 
@@ -230,7 +240,15 @@ export async function POST(req: Request) {
       },
       { status: 200 },
     );
-  } catch {
-    return NextResponse.json({ error: "Failed to upload avatar" }, { status: 500 });
+  } catch (error: unknown) {
+    return handleRouteError(error, {
+      request: req,
+      logger,
+      fallbackMessage: "Failed to upload avatar",
+      context: {
+        userId: session.user.id,
+        email: session.user.email,
+      },
+    });
   }
 }

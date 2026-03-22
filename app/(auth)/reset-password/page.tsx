@@ -1,22 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
+import { AlertCircle, Loader2, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { AlertCircle, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import {
+  AuthBrand,
+  AuthCanvas,
+  AuthFooterMeta,
+  AuthPanel,
+} from "@/app/components/auth/auth-shell";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
-import { Label } from "../../components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "../../components/ui/card";
-import { Alert, AlertDescription } from "../../components/ui/alert";
 import {
   getResetPasswordMismatchError,
   parseRecoveryTokens,
@@ -49,20 +45,15 @@ export default function Page() {
         refresh_token: tokens.refreshToken,
       });
 
-      if (sessionError) {
-        setIsLinkValid(false);
-      } else {
-        setIsLinkValid(true);
-      }
-
+      setIsLinkValid(!sessionError);
       setCheckingLink(false);
     };
 
     void applyRecoverySession();
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     setError("");
 
     const mismatchError = getResetPasswordMismatchError(
@@ -87,9 +78,11 @@ export default function Page() {
 
       toast.success("Password updated successfully");
       router.push("/login");
-    } catch (err: unknown) {
+    } catch (submitError: unknown) {
       const message =
-        err instanceof Error ? err.message : "Failed to reset password";
+        submitError instanceof Error
+          ? submitError.message
+          : "Failed to reset password";
       setError(message);
       toast.error(message);
     } finally {
@@ -98,102 +91,111 @@ export default function Page() {
   };
 
   return (
-    <div className="min-h-screen bg-muted/50 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="flex justify-center mb-8">
-          <div className="flex items-center gap-3">
-            <div className="relative h-12 w-12 overflow-hidden rounded-xl border border-border bg-background">
-              <Image
-                src="/logo.webp"
-                alt="OpsDesk logo"
-                fill
-                className="object-cover"
-                sizes="48px"
-                priority
-              />
-            </div>
-            <span className="text-2xl font-semibold text-foreground">
-              OpsDesk
-            </span>
+    <AuthCanvas>
+      <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-md flex-col">
+        <AuthBrand className="mb-10" />
+        <AuthPanel>
+          <div className="mb-8">
+            <h1 className="text-2xl font-semibold tracking-[-0.02em] text-[var(--on-surface)]">
+              Reset your password
+            </h1>
+            <p className="mt-2 text-sm text-[var(--on-surface-variant)]">
+              Choose a new password for your account.
+            </p>
           </div>
-        </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Reset your password</CardTitle>
-            <CardDescription>Choose a new password for your account.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {checkingLink ? (
-              <div className="flex items-center justify-center text-sm text-muted-foreground py-4">
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Verifying reset link...
+          {checkingLink ? (
+            <div className="flex items-center justify-center gap-2 rounded-2xl bg-[var(--surface-container-low)] px-4 py-5 text-sm text-[var(--on-surface-variant)]">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Verifying reset link...
+            </div>
+          ) : !isLinkValid ? (
+            <div className="space-y-4">
+              <div className="rounded-2xl bg-[var(--error-container)] px-4 py-3 text-sm font-medium text-[var(--error)]">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>This reset link is invalid or expired.</span>
+                </div>
               </div>
-            ) : !isLinkValid ? (
-              <div className="space-y-4">
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    This reset link is invalid or expired.
-                  </AlertDescription>
-                </Alert>
-                <Button className="w-full" onClick={() => router.push("/login")}>
-                  Back to login
-                </Button>
+              <Button
+                className="premium-gradient min-h-[3.25rem] w-full rounded-xl text-sm font-semibold text-[var(--on-primary)] shadow-[0_12px_28px_rgba(0,95,158,0.18)] hover:opacity-95"
+                onClick={() => router.push("/login")}
+              >
+                Back to Login
+              </Button>
+            </div>
+          ) : (
+            <form className="space-y-5" onSubmit={handleSubmit}>
+              {error ? (
+                <div className="rounded-2xl bg-[var(--error-container)] px-4 py-3 text-sm font-medium text-[var(--error)]">
+                  <div className="flex items-start gap-3">
+                    <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>{error}</span>
+                  </div>
+                </div>
+              ) : null}
+
+              <div>
+                <label className="label-caps mb-2 ml-1 block" htmlFor="password">
+                  New Password
+                </label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="At least 6 characters"
+                  minLength={6}
+                  disabled={loading}
+                  className="input-field border-0 px-4 py-3 shadow-none"
+                  required
+                />
               </div>
-            ) : (
-              <form onSubmit={handleSubmit} className="space-y-4">
-                {error && (
-                  <Alert variant="destructive">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>{error}</AlertDescription>
-                  </Alert>
+
+              <div>
+                <label
+                  className="label-caps mb-2 ml-1 block"
+                  htmlFor="confirmPassword"
+                >
+                  Confirm Password
+                </label>
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  placeholder="Confirm your new password"
+                  minLength={6}
+                  disabled={loading}
+                  className="input-field border-0 px-4 py-3 shadow-none"
+                  required
+                />
+              </div>
+
+              <Button
+                type="submit"
+                className="premium-gradient min-h-[3.25rem] w-full rounded-xl text-sm font-semibold text-[var(--on-primary)] shadow-[0_12px_28px_rgba(0,95,158,0.18)] hover:opacity-95"
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Updating password...
+                  </>
+                ) : (
+                  "Update password"
                 )}
+              </Button>
+            </form>
+          )}
+        </AuthPanel>
 
-                <div className="space-y-2">
-                  <Label htmlFor="password">New Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="At least 6 characters"
-                    minLength={6}
-                    disabled={loading}
-                    required
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="confirmPassword">Confirm Password</Label>
-                  <Input
-                    id="confirmPassword"
-                    type="password"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    placeholder="Confirm your new password"
-                    minLength={6}
-                    disabled={loading}
-                    required
-                  />
-                </div>
-
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Updating password...
-                    </>
-                  ) : (
-                    "Update password"
-                  )}
-                </Button>
-              </form>
-            )}
-          </CardContent>
-        </Card>
+        <div className="mt-8 flex items-center justify-center gap-2 text-[11px] font-medium uppercase tracking-[0.12em] text-[var(--on-surface-variant)]">
+          <ShieldCheck className="h-3.5 w-3.5" />
+          <span>Secure recovery session</span>
+        </div>
+        <AuthFooterMeta className="pt-8" />
       </div>
-    </div>
+    </AuthCanvas>
   );
 }
-

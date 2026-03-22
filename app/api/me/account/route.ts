@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { createRequestLogger, writeLog } from "@/lib/observability/logger";
+import { handleRouteError } from "@/lib/observability/route-handler";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
+import type { OrganizationRole } from "@/lib/server/permissions";
 import { ACTIVE_ORG_COOKIE } from "@/lib/topbar/constants";
 
 type DeleteAccountBody = {
@@ -10,7 +13,7 @@ type DeleteAccountBody = {
 
 type MembershipRow = {
   organization_id: string;
-  role: "admin" | "manager" | "support" | "read_only";
+  role: OrganizationRole;
   status?: "active" | "suspended" | null;
 };
 
@@ -22,6 +25,11 @@ function isMissingStatusColumnError(message: string): boolean {
 
 export async function DELETE(req: Request) {
   const session = await auth();
+  const logger = createRequestLogger(req, {
+    route: "api.me.account.delete",
+    userId: session?.user?.id ?? null,
+    email: session?.user?.email ?? null,
+  });
   if (!session?.user?.id || !session.user.email) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -57,7 +65,7 @@ export async function DELETE(req: Request) {
       .from("organization_memberships")
       .select("organization_id, role, status")
       .eq("user_id", session.user.id)
-      .eq("role", "admin")
+      .eq("role", "org_admin")
       .eq("status", "active")
       .returns<MembershipRow[]>();
 
@@ -67,7 +75,7 @@ export async function DELETE(req: Request) {
           .from("organization_memberships")
           .select("organization_id, role")
           .eq("user_id", session.user.id)
-          .eq("role", "admin")
+          .eq("role", "org_admin")
           .returns<MembershipRow[]>()
       : membershipResultWithStatus;
 
@@ -87,7 +95,7 @@ export async function DELETE(req: Request) {
         .from("organization_memberships")
         .select("id", { count: "exact", head: true })
         .eq("organization_id", orgId)
-        .eq("role", "admin")
+        .eq("role", "org_admin")
         .eq("status", "active");
 
       const adminCountResult = adminCountResultWithStatus.error &&
@@ -96,7 +104,7 @@ export async function DELETE(req: Request) {
             .from("organization_memberships")
             .select("id", { count: "exact", head: true })
             .eq("organization_id", orgId)
-            .eq("role", "admin")
+            .eq("role", "org_admin")
         : adminCountResultWithStatus;
 
       if (adminCountResult.error) {
@@ -186,7 +194,9 @@ export async function DELETE(req: Request) {
         .from(AVATAR_BUCKET)
         .remove(paths);
       if (avatarDeleteError) {
-        console.warn(`Failed to remove avatar files: ${avatarDeleteError.message}`);
+        writeLog(logger, "warn", "Failed to remove avatar files during account deletion", {
+          error: avatarDeleteError.message,
+        });
       }
     }
 
@@ -204,7 +214,15 @@ export async function DELETE(req: Request) {
     );
     response.cookies.delete(ACTIVE_ORG_COOKIE);
     return response;
-  } catch {
-    return NextResponse.json({ error: "Failed to delete account" }, { status: 500 });
+  } catch (error: unknown) {
+    return handleRouteError(error, {
+      request: req,
+      logger,
+      fallbackMessage: "Failed to delete account",
+      context: {
+        userId: session.user.id,
+        email: session.user.email,
+      },
+    });
   }
 }

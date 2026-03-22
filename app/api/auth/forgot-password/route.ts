@@ -6,17 +6,19 @@ import {
   FORGOT_PASSWORD_SUCCESS_MESSAGE,
   normalizeEmail,
 } from "@/app/(auth)/forgot-password/forgot-password-flow";
-
-function getRequiredEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(`Missing required environment variable: ${name}`);
-  }
-
-  return value;
-}
+import { createRequestLogger, writeLog } from "@/lib/observability/logger";
+import { handleRouteError } from "@/lib/observability/route-handler";
+import {
+  getRequiredEnv,
+  getSupabaseServiceRoleKey,
+  getSupabaseUrl,
+} from "@/lib/env";
 
 export async function POST(req: Request) {
+  const logger = createRequestLogger(req, {
+    route: "api.auth.forgot-password.post",
+  });
+
   try {
     const { email } = await req.json();
 
@@ -29,8 +31,8 @@ export async function POST(req: Request) {
 
     const normalizedEmail = normalizeEmail(email);
     const supabaseAdmin = createClient(
-      getRequiredEnv("NEXT_PUBLIC_SUPABASE_URL"),
-      getRequiredEnv("SUPABASE_SERVICE_ROLE_KEY"),
+      getSupabaseUrl(),
+      getSupabaseServiceRoleKey(),
     );
 
     const { data: linkData, error: linkError } =
@@ -45,9 +47,11 @@ export async function POST(req: Request) {
     if (!linkError && linkData?.properties?.action_link) {
       const resend = new Resend(getRequiredEnv("RESEND_API_KEY"));
       const { error: emailError } = await resend.emails.send({
-        from: "OpsDesk <contact@ziadhatem.dev>",
+        from:
+          process.env.RESEND_FROM_EMAIL ??
+          "Nexus Orchestrator <onboarding@resend.dev>",
         to: [normalizedEmail],
-        subject: "Reset your OpsDesk password",
+        subject: "Reset your Nexus Orchestrator password",
         react: await ResetPasswordEmail({
           email: normalizedEmail,
           resetLink: linkData.properties.action_link,
@@ -55,11 +59,17 @@ export async function POST(req: Request) {
       });
 
       if (emailError) {
-        console.error("Failed to send password reset email:", emailError);
+        writeLog(logger, "warn", "Failed to send password reset email", {
+          email: normalizedEmail,
+          emailError,
+        });
       }
     } else if (linkError) {
       // Keep response generic so account existence cannot be inferred.
-      console.error("Password reset link generation failed:", linkError.message);
+      writeLog(logger, "warn", "Password reset link generation failed", {
+        email: normalizedEmail,
+        error: linkError.message,
+      });
     }
 
     return NextResponse.json(
@@ -67,8 +77,10 @@ export async function POST(req: Request) {
       { status: 200 },
     );
   } catch (err: unknown) {
-    const message =
-      err instanceof Error ? err.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return handleRouteError(err, {
+      request: req,
+      logger,
+      fallbackMessage: "Internal server error",
+    });
   }
 }

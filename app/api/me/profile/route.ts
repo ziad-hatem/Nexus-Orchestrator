@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { createRequestLogger } from "@/lib/observability/logger";
+import { handleRouteError } from "@/lib/observability/route-handler";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { normalizeAvatarUrl } from "@/lib/avatar-url";
+import {
+  normalizeEmail,
+  normalizeOptionalText,
+} from "@/lib/server/validation";
 
 type UserRow = {
   id: string;
@@ -31,30 +37,6 @@ type UpdateProfileBody = {
   multiStepAuthEnabled?: boolean;
   newPassword?: string;
 };
-
-function normalizeOptionalText(value: unknown, maxLength = 255): string | null {
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const normalized = value.trim();
-  if (!normalized.length) {
-    return null;
-  }
-
-  return normalized.slice(0, maxLength);
-}
-
-function normalizeEmail(value: unknown): string | null {
-  const normalized = normalizeOptionalText(value, 320);
-  if (!normalized) {
-    return null;
-  }
-
-  const lowered = normalized.toLowerCase();
-  const isValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(lowered);
-  return isValid ? lowered : null;
-}
 
 function readProfileMetadata(metadata: unknown): ProfileMetadata {
   const record = metadata && typeof metadata === "object"
@@ -136,8 +118,13 @@ async function ensureUserRow(params: {
   };
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const session = await auth();
+  const logger = createRequestLogger(req, {
+    route: "api.me.profile.get",
+    userId: session?.user?.id ?? null,
+    email: session?.user?.email ?? null,
+  });
   if (!session?.user?.id || !session.user.email) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -175,13 +162,26 @@ export async function GET() {
       },
       { status: 200 },
     );
-  } catch {
-    return NextResponse.json({ error: "Failed to load profile" }, { status: 500 });
+  } catch (error: unknown) {
+    return handleRouteError(error, {
+      request: req,
+      logger,
+      fallbackMessage: "Failed to load profile",
+      context: {
+        userId: session.user.id,
+        email: session.user.email,
+      },
+    });
   }
 }
 
 export async function PATCH(req: Request) {
   const session = await auth();
+  const logger = createRequestLogger(req, {
+    route: "api.me.profile.patch",
+    userId: session?.user?.id ?? null,
+    email: session?.user?.email ?? null,
+  });
   if (!session?.user?.id || !session.user.email) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -441,7 +441,15 @@ export async function PATCH(req: Request) {
       },
       { status: 200 },
     );
-  } catch {
-    return NextResponse.json({ error: "Failed to update profile" }, { status: 500 });
+  } catch (error: unknown) {
+    return handleRouteError(error, {
+      request: req,
+      logger,
+      fallbackMessage: "Failed to update profile",
+      context: {
+        userId: session.user.id,
+        email: session.user.email,
+      },
+    });
   }
 }

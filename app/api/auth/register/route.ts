@@ -1,20 +1,24 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
-import VerificationEmail from "../../../../app/emails/VerificationEmail";
-
-function getRequiredEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) {
-    throw new Error(`Missing required environment variable: ${name}`);
-  }
-
-  return value;
-}
+import VerificationEmail from "@/app/emails/VerificationEmail";
+import { createRequestLogger, writeLog } from "@/lib/observability/logger";
+import { handleRouteError } from "@/lib/observability/route-handler";
+import { safeRedirectPath } from "@/lib/redirect-path";
+import {
+  getRequiredEnv,
+  getSupabaseServiceRoleKey,
+  getSupabaseUrl,
+} from "@/lib/env";
 
 export async function POST(req: Request) {
+  const logger = createRequestLogger(req, {
+    route: "api.auth.register.post",
+  });
+
   try {
-    const { email, password, firstName, lastName, company } = await req.json();
+    const { email, password, firstName, lastName, company, next } =
+      await req.json();
 
     if (!email || !password || !firstName || !lastName) {
       return NextResponse.json(
@@ -23,9 +27,16 @@ export async function POST(req: Request) {
       );
     }
 
+    const redirectPath = safeRedirectPath(next) ?? "/";
+    const verificationUrl = new URL("/login", getRequiredEnv("NEXTAUTH_URL"));
+    verificationUrl.searchParams.set("verified", "true");
+    if (redirectPath !== "/") {
+      verificationUrl.searchParams.set("next", redirectPath);
+    }
+
     const supabaseAdmin = createClient(
-      getRequiredEnv("NEXT_PUBLIC_SUPABASE_URL"),
-      getRequiredEnv("SUPABASE_SERVICE_ROLE_KEY"),
+      getSupabaseUrl(),
+      getSupabaseServiceRoleKey(),
     );
 
     // Generate a signup link via the Supabase Admin API to use with Resend
@@ -39,9 +50,9 @@ export async function POST(req: Request) {
             first_name: firstName,
             last_name: lastName,
             company: company || "",
-            registered_via_opsdesk: true,
+            registered_via_nexusorchestrator: true,
           },
-          redirectTo: `${getRequiredEnv("NEXTAUTH_URL")}/login?verified=true`,
+          redirectTo: verificationUrl.toString(),
         },
       });
 
@@ -55,19 +66,31 @@ export async function POST(req: Request) {
     try {
       const resend = new Resend(getRequiredEnv("RESEND_API_KEY"));
       const { error: emailError } = await resend.emails.send({
-        from: "OpsDesk <contact@ziadhatem.dev>",
+        from:
+          process.env.RESEND_FROM_EMAIL ??
+          "Nexus Orchestrator <onboarding@resend.dev>",
         to: [email],
-        subject: "Verify your OpsDesk account",
+        subject: "Verify your Nexus Orchestrator account",
         react: await VerificationEmail({ email, firstName, verificationLink }),
       });
 
       if (emailError) {
-        // We log email errors but don't fail the total signup process if just the email failed.
-        // For a production app we might queue this or handle it better.
-        console.error("Failed to send verification email:", emailError);
+        writeLog(logger, "warn", "Failed to send verification email", {
+          email,
+          emailError,
+        });
       }
     } catch (emailException) {
-      console.error("Resend exception:", emailException);
+      writeLog(logger, "warn", "Verification email delivery threw an exception", {
+        email,
+        error: emailException instanceof Error
+          ? {
+              name: emailException.name,
+              message: emailException.message,
+              stack: emailException.stack,
+            }
+          : String(emailException),
+      });
     }
 
     return NextResponse.json(
@@ -75,13 +98,10 @@ export async function POST(req: Request) {
       { status: 201 },
     );
   } catch (err: unknown) {
-    const message =
-      err instanceof Error && err.message
-        ? err.message
-        : "Internal server error";
-    return NextResponse.json(
-      { error: message },
-      { status: 500 },
-    );
+    return handleRouteError(err, {
+      request: req,
+      logger,
+      fallbackMessage: "Internal server error",
+    });
   }
 }

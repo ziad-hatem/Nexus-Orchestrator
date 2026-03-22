@@ -1,6 +1,7 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import * as Sentry from "@sentry/nextjs";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Loader2, TriangleAlert } from "lucide-react";
 import { signIn } from "next-auth/react";
@@ -12,6 +13,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/app/components/ui/card";
+import { MAIN_CONTENT_ID } from "@/lib/a11y";
+import { safeRedirectPath } from "@/lib/redirect-path";
 import { supabase } from "@/lib/supabase";
 
 type SignInResultWithCode = {
@@ -50,19 +53,39 @@ function GoogleCallbackContent() {
   const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
   const [isNewAccount, setIsNewAccount] = useState(false);
+  const queryString = useMemo(() => searchParams.toString(), [searchParams]);
+  const redirectPath = useMemo(
+    () => safeRedirectPath(searchParams.get("next")) ?? "/",
+    [searchParams],
+  );
+  const loginPath = useMemo(() => {
+    if (redirectPath === "/") {
+      return "/login";
+    }
+
+    return `/login?${new URLSearchParams({ next: redirectPath }).toString()}`;
+  }, [redirectPath]);
+  const registerPath = useMemo(() => {
+    if (redirectPath === "/") {
+      return "/register";
+    }
+
+    return `/register?${new URLSearchParams({ next: redirectPath }).toString()}`;
+  }, [redirectPath]);
 
   useEffect(() => {
     let isMounted = true;
 
     async function completeLogin() {
       try {
-        const isRegisterIntent = searchParams.get("intent") === "register";
+        const params = new URLSearchParams(queryString);
+        const isRegisterIntent = params.get("intent") === "register";
 
         let accessToken: string | null = null;
         let refreshToken: string | null = null;
 
         // --- PKCE Flow: Supabase returns ?code= in the URL (default in newer versions) ---
-        const code = searchParams.get("code");
+        const code = params.get("code");
         if (code) {
           const { data, error: exchangeError } =
             await supabase.auth.exchangeCodeForSession(code);
@@ -122,13 +145,18 @@ function GoogleCallbackContent() {
         if (isRegisterIntent) {
           const { error: updateMetadataError } = await supabase.auth.updateUser({
             data: {
-              registered_via_opsdesk: true,
+              registered_via_nexusorchestrator: true,
             },
           });
           if (updateMetadataError) {
-            console.error(
-              `[auth/callback] failed to persist register marker: ${updateMetadataError.message}`,
-            );
+            Sentry.captureException(updateMetadataError, {
+              tags: {
+                route: "auth.callback",
+              },
+              extra: {
+                step: "persist_register_marker",
+              },
+            });
           }
         } else {
           const accountCheckResponse = await fetch("/api/auth/oauth/account-check", {
@@ -153,7 +181,7 @@ function GoogleCallbackContent() {
             if (!isMounted) return;
             setIsNewAccount(true);
             setError(
-              "No OpsDesk account found for this Google email. Please sign up first.",
+              "No nexusorchestrator account found for this Google email. Please sign up first.",
             );
             return;
           }
@@ -180,7 +208,7 @@ function GoogleCallbackContent() {
           // Redirect them to home anyway; they'll be prompted to join/create an org.
           if (isRegisterIntent) {
             if (!isMounted) return;
-            router.replace("/");
+            router.replace(redirectPath);
             return;
           }
 
@@ -190,7 +218,7 @@ function GoogleCallbackContent() {
         }
 
         if (!isMounted) return;
-        router.replace("/");
+        router.replace(redirectPath);
       } catch (err: unknown) {
         if (!isMounted) return;
         setError(
@@ -206,47 +234,54 @@ function GoogleCallbackContent() {
     return () => {
       isMounted = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [queryString, redirectPath, router]);
 
   if (error) {
     return (
-      <div className="min-h-screen bg-muted/50 flex items-center justify-center p-4">
+      <main
+        id={MAIN_CONTENT_ID}
+        tabIndex={-1}
+        className="min-h-screen bg-muted/50 flex items-center justify-center p-4"
+      >
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <TriangleAlert className="h-5 w-5 text-red-500" />
               {isNewAccount ? "Account Not Found" : "Sign-In Failed"}
             </CardTitle>
-            <CardDescription>{error}</CardDescription>
+            <CardDescription role="alert">{error}</CardDescription>
           </CardHeader>
           <CardContent className="flex gap-2 justify-end">
             {isNewAccount ? (
               <>
                 <Button
                   variant="outline"
-                  onClick={() => router.replace("/login")}
+                  onClick={() => router.replace(loginPath)}
                 >
                   Back to Login
                 </Button>
-                <Button onClick={() => router.replace("/register")}>
+                <Button onClick={() => router.replace(registerPath)}>
                   Create Account
                 </Button>
               </>
             ) : (
-              <Button onClick={() => router.replace("/login")}>
+              <Button onClick={() => router.replace(loginPath)}>
                 Back to Login
               </Button>
             )}
           </CardContent>
         </Card>
-      </div>
+      </main>
     );
   }
 
   return (
-    <div className="min-h-screen bg-muted/50 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
+    <main
+      id={MAIN_CONTENT_ID}
+      tabIndex={-1}
+      className="min-h-screen bg-muted/50 flex items-center justify-center p-4"
+    >
+      <Card className="w-full max-w-md" role="status" aria-live="polite">
         <CardHeader>
           <CardTitle>Signing You In</CardTitle>
           <CardDescription>
@@ -258,14 +293,18 @@ function GoogleCallbackContent() {
           Completing login, please wait.
         </CardContent>
       </Card>
-    </div>
+    </main>
   );
 }
 
 function GoogleCallbackFallback() {
   return (
-    <div className="min-h-screen bg-muted/50 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
+    <main
+      id={MAIN_CONTENT_ID}
+      tabIndex={-1}
+      className="min-h-screen bg-muted/50 flex items-center justify-center p-4"
+    >
+      <Card className="w-full max-w-md" role="status" aria-live="polite">
         <CardHeader>
           <CardTitle>Loading Sign-In</CardTitle>
           <CardDescription>Preparing your callback...</CardDescription>
@@ -275,7 +314,7 @@ function GoogleCallbackFallback() {
           Loading, please wait.
         </CardContent>
       </Card>
-    </div>
+    </main>
   );
 }
 

@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/auth";
+import { createRequestLogger, writeLog } from "@/lib/observability/logger";
+import { handleRouteError } from "@/lib/observability/route-handler";
+import { safeRedirectPath } from "@/lib/redirect-path";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { sendMagicLinkEmail } from "@/lib/server/magic-link-email";
 
@@ -7,6 +10,7 @@ export const runtime = "nodejs";
 
 type RequestBody = {
   email?: string;
+  next?: string;
 };
 
 function normalizeEmail(value: unknown): string | null {
@@ -80,6 +84,10 @@ async function hasRegisteredAuthUser(
 }
 
 export async function POST(req: Request) {
+  const logger = createRequestLogger(req, {
+    route: "api.auth.passwordless.magic-link.post",
+  });
+
   let body: RequestBody = {};
   try {
     body = (await req.json()) as RequestBody;
@@ -109,7 +117,12 @@ export async function POST(req: Request) {
       );
     }
 
-    const redirectTo = `${getAppBaseUrl()}/auth/magic-link`;
+    const redirectPath = safeRedirectPath(body.next) ?? "/";
+    const redirectToUrl = new URL("/auth/magic-link", getAppBaseUrl());
+    if (redirectPath !== "/") {
+      redirectToUrl.searchParams.set("next", redirectPath);
+    }
+    const redirectTo = redirectToUrl.toString();
 
     const { data: linkData, error: linkError } =
       await supabase.auth.admin.generateLink({
@@ -119,9 +132,10 @@ export async function POST(req: Request) {
       });
 
     if (linkError || !linkData?.properties?.action_link) {
-      console.error(
-        `Magic link generation failed for ${email}: ${linkError?.message ?? "No action_link returned"}`,
-      );
+      writeLog(logger, "error", "Magic link generation failed", {
+        email,
+        error: linkError?.message ?? "No action_link returned",
+      });
       return NextResponse.json(
         { error: "Failed to generate magic link" },
         { status: 502 },
@@ -135,8 +149,10 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ message: SUCCESS_MESSAGE }, { status: 200 });
   } catch (error: unknown) {
-    const message =
-      error instanceof Error ? error.message : "Failed to send magic link";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return handleRouteError(error, {
+      request: req,
+      logger,
+      fallbackMessage: "Failed to send magic link",
+    });
   }
 }

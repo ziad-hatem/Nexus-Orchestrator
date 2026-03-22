@@ -39,7 +39,7 @@ export function createPasskeyServerOptions(): ServerOptions {
     store: new SupabaseStore(supabase, "passkey_challenges"),
     rpConfig: {
       rpID: getRpId(expectedOrigin),
-      rpName: process.env.PASSKEY_RP_NAME ?? "OpsDesk",
+      rpName: process.env.PASSKEY_RP_NAME ?? "nexusorchestrator",
       expectedOrigin,
     },
   };

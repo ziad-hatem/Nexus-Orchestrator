@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   ArrowRight,
@@ -33,6 +33,7 @@ import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { hasVerifiedQuery, mapLoginError } from "./login-flow";
 import { passkeyEndpoints } from "@/lib/passkey-endpoints";
+import { safeRedirectPath } from "@/lib/redirect-path";
 import { supabase } from "@/lib/supabase";
 
 type SignInResultWithCode = {
@@ -77,6 +78,15 @@ function isMultiStepAuthEnabled(metadata: unknown): boolean {
   }
 
   return (metadata as Record<string, unknown>).multi_step_auth_enabled === true;
+}
+
+function buildAuthPageHref(pathname: string, redirectPath: string): string {
+  if (redirectPath === "/") {
+    return pathname;
+  }
+
+  const searchParams = new URLSearchParams({ next: redirectPath });
+  return `${pathname}?${searchParams.toString()}`;
 }
 
 function mapPasswordSignInError(error: unknown): string {
@@ -224,6 +234,14 @@ function LoginPageContent() {
   const { authenticate: authenticatePasskey } = useAuthenticatePasskey({
     endpoints: passkeyEndpoints,
   });
+  const redirectPath = useMemo(
+    () => safeRedirectPath(searchParams.get("next")) ?? "/",
+    [searchParams],
+  );
+  const registerPath = useMemo(
+    () => buildAuthPageHref("/register", redirectPath),
+    [redirectPath],
+  );
   const normalizedEmail = normalizeEmail(email);
   const hasValidEmail = isEmailFormat(normalizedEmail);
 
@@ -388,9 +406,596 @@ function LoginPageContent() {
     }
   };
 
-  return null;
+  const handlePasswordSignIn = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      const nextEmail = normalizeEmail(email);
+      const { data, error: supabaseError } =
+        await supabase.auth.signInWithPassword({
+          email: nextEmail,
+          password,
+        });
+
+      if (supabaseError || !data.user) {
+        throw new Error(mapPasswordSignInError(supabaseError));
+      }
+
+      if (isMultiStepAuthEnabled(data.user.user_metadata)) {
+        await startMfaStep(nextEmail);
+        return;
+      }
+
+      await finalizeSessionSignIn();
+      toast.success("Logged in successfully");
+      router.push(redirectPath);
+    } catch (submitError: unknown) {
+      const message =
+        submitError instanceof Error
+          ? submitError.message
+          : "Failed to sign in";
+      setError(message);
+      toast.error(message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyMfaCode = async () => {
+    const trimmedCode = mfaCode.trim();
+    if (!/^\d{6}$/.test(trimmedCode)) {
+      setError("Enter the 6-digit verification code from your email.");
+      return;
+    }
+
+    setError("");
+    setIsVerifyingMfaCode(true);
+
+    try {
+      const { accessToken } = await getSessionTokens();
+      const mfaAssertion = await verifyMfaCode({
+        accessToken,
+        code: trimmedCode,
+      });
+
+      await finalizeSessionSignIn({ mfaAssertion });
+      toast.success("Signed in with multi-step authentication");
+      router.push(redirectPath);
+    } catch (verifyError: unknown) {
+      const message =
+        verifyError instanceof Error
+          ? verifyError.message
+          : "Failed to verify code";
+      setError(message);
+      toast.error(message);
+    } finally {
+      setIsVerifyingMfaCode(false);
+    }
+  };
+
+  const handleResendMfaCode = async () => {
+    setError("");
+    setIsSendingMfaCode(true);
+
+    try {
+      const { accessToken } = await getSessionTokens();
+      const response = await sendMfaCode(accessToken);
+      setMfaTargetEmail((previous) => response.email ?? previous);
+      setMfaInfo(response.message ?? "Verification code sent to your email.");
+      toast.success("Verification code resent.");
+    } catch (resendError: unknown) {
+      const message =
+        resendError instanceof Error
+          ? resendError.message
+          : "Failed to resend verification code";
+      setError(message);
+      toast.error(message);
+    } finally {
+      setIsSendingMfaCode(false);
+    }
+  };
+
+  const handleCancelMfa = async () => {
+    await supabase.auth.signOut();
+    setRequiresMfa(false);
+    setMfaCode("");
+    setMfaInfo("");
+    setMfaTargetEmail(null);
+    setPassword("");
+    setError("");
+  };
+
+  const handleGoogleSignIn = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      const { error: supabaseError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: buildAuthPageHref(
+            `${window.location.origin}/auth/callback`,
+            redirectPath,
+          ),
+        },
+      });
+
+      if (supabaseError) {
+        throw new Error(supabaseError.message);
+      }
+    } catch (oauthError: unknown) {
+      const message =
+        oauthError instanceof Error
+          ? oauthError.message
+          : "Failed to sign in with Google";
+      setError(message);
+      toast.error(message);
+      setLoading(false);
+    }
+  };
+
+  const handleSendMagicLink = async () => {
+    const nextEmail = normalizeEmail(email);
+    if (!nextEmail) {
+      setError("Enter your email to receive a magic link");
+      return;
+    }
+
+    if (!isEmailFormat(nextEmail)) {
+      setError("Enter a valid email address to receive a magic link");
+      return;
+    }
+
+    setError("");
+    setIsSendingMagicLink(true);
+
+    try {
+      const response = await fetch("/api/auth/passwordless/magic-link", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email: nextEmail, next: redirectPath }),
+      });
+
+      const data = (await response.json()) as {
+        message?: string;
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(data.error ?? "Failed to send magic link");
+      }
+
+      const successMessage =
+        data.message ?? "Check your email for a sign-in link.";
+      setMagicLinkTargetEmail(nextEmail);
+      setMagicLinkInfo(successMessage);
+      toast.success(successMessage);
+    } catch (sendError: unknown) {
+      const message =
+        sendError instanceof Error
+          ? sendError.message
+          : "Failed to send magic link";
+      setError(message);
+      toast.error(message);
+    } finally {
+      setIsSendingMagicLink(false);
+    }
+  };
+
+  const handlePasskeySignIn = async () => {
+    setError("");
+
+    if (!hasValidEmail) {
+      setError("Enter a valid email to continue with passkey.");
+      return;
+    }
+
+    if (isCheckingPasskey || passkeyLookupEmail !== normalizedEmail) {
+      setError("Checking passkey availability. Try again in a moment.");
+      return;
+    }
+
+    if (!hasRegisteredPasskey || !passkeyUserId) {
+      setError("No registered passkey was found for this email.");
+      return;
+    }
+
+    if (typeof window === "undefined" || !("PublicKeyCredential" in window)) {
+      setError("Passkeys are not supported in this browser");
+      return;
+    }
+    if (!window.isSecureContext) {
+      setError(
+        "Passkeys require HTTPS (or localhost). On phone, use your HTTPS domain.",
+      );
+      return;
+    }
+
+    setIsSigningInWithPasskey(true);
+
+    try {
+      const assertionToken = await runPasskeyChallenge(passkeyUserId);
+      const result = (await signIn("passkey-assertion", {
+        redirect: false,
+        assertionToken,
+      })) as SignInResultWithCode | undefined;
+
+      if (result?.error) {
+        throw new Error(mapLoginError(result.error, readAuthErrorCode(result)));
+      }
+
+      toast.success("Signed in with passkey");
+      router.push(redirectPath);
+    } catch (passkeyError: unknown) {
+      const message = mapPasskeyRuntimeError(passkeyError);
+      setError(message);
+      toast.error(message);
+    } finally {
+      setIsSigningInWithPasskey(false);
+    }
+  };
+
+  const handleOpenMailApp = () => {
+    if (typeof window !== "undefined") {
+      window.location.href = "mailto:";
+    }
+  };
+
+  const passkeyDescription = !hasValidEmail
+    ? "Use biometrics or a security key once we confirm a registered passkey for this account."
+    : isCheckingPasskey || passkeyLookupEmail !== normalizedEmail
+      ? "Checking for a registered passkey on this workspace."
+      : hasRegisteredPasskey
+        ? "A passkey is registered for this email. Use biometrics or your security key to continue."
+        : "No passkey was found for this email yet. You can still continue with your magic link.";
+
+  if (isVerified) {
+    return (
+      <AuthCanvas>
+        <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-md flex-col">
+          <AuthBrand className="mb-10" />
+          <AuthPanel className="text-center">
+            <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--surface-container-low)] text-primary">
+              <CheckCircle2 className="h-8 w-8" />
+            </div>
+            <h2 className="text-2xl font-bold tracking-[-0.02em] text-[var(--on-surface)]">
+              Email verified
+            </h2>
+            <p className="mt-3 body-md text-[var(--on-surface-variant)]">
+              Your email is confirmed. Redirecting to login in {countdown}s.
+            </p>
+            <Button
+              variant="outline"
+              className="mt-8 min-h-[3.25rem] w-full rounded-xl border-0 bg-[var(--surface-container-high)] text-sm font-semibold text-primary hover:bg-[var(--surface-container)]"
+              onClick={() => {
+                setIsVerified(false);
+                router.replace("/login");
+              }}
+            >
+              Continue to Login
+            </Button>
+          </AuthPanel>
+          <AuthFooterMeta />
+        </div>
+      </AuthCanvas>
+    );
+  }
+
+  if (requiresMfa) {
+    return (
+      <AuthCanvas>
+        <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-md flex-col">
+          <MfaPanel
+            description={`We've sent a 6-digit verification code to ${mfaTargetEmail ?? "your registered email"}. Enter the code below to continue.`}
+            code={mfaCode}
+            info={mfaInfo}
+            error={error}
+            onCodeChange={setMfaCode}
+            onVerify={handleVerifyMfaCode}
+            onResend={handleResendMfaCode}
+            onAlternative={() => void handleCancelMfa()}
+            verifyDisabled={mfaBusy}
+            resendDisabled={mfaBusy}
+            alternativeDisabled={mfaBusy}
+            isVerifying={isVerifyingMfaCode}
+            isResending={isSendingMfaCode}
+          />
+          <AuthFooterMeta className="pt-8" />
+        </div>
+      </AuthCanvas>
+    );
+  }
+
+  if (magicLinkTargetEmail) {
+    return (
+      <AuthCanvas>
+        <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-5xl flex-col">
+          <AuthBrand className="mb-10" />
+          {error ? (
+            <div className="mx-auto mb-6 max-w-2xl rounded-2xl bg-[var(--error-container)] px-4 py-3 text-sm font-medium text-[var(--error)]">
+              {error}
+            </div>
+          ) : null}
+          <div className="grid gap-6 lg:grid-cols-2">
+            <MagicLinkPanel
+              description={
+                magicLinkInfo ||
+                "We've sent a secure sign-in link to your registered email."
+              }
+              email={magicLinkTargetEmail}
+              onPrimaryAction={handleOpenMailApp}
+              onSecondaryAction={() => void handleSendMagicLink()}
+              primaryDisabled={isSendingMagicLink}
+              secondaryDisabled={isSendingMagicLink}
+              secondaryActionLabel={
+                isSendingMagicLink ? "Sending..." : "Resend Link"
+              }
+            />
+            <PasskeyStatusPanel
+              description={passkeyDescription}
+              status={
+                isCheckingPasskey || passkeyLookupEmail !== normalizedEmail
+                  ? "Checking registered credentials..."
+                  : hasRegisteredPasskey
+                    ? "Ready to verify on your device."
+                    : "No passkey available yet."
+              }
+              primaryLabel="Try Biometric Login"
+              onPrimaryAction={handlePasskeySignIn}
+              disabled={
+                disableLoginActions ||
+                isCheckingPasskey ||
+                passkeyLookupEmail !== normalizedEmail ||
+                !hasRegisteredPasskey
+              }
+              isBusy={isSigningInWithPasskey}
+            />
+          </div>
+          <div className="mt-6 text-center">
+            <Button
+              type="button"
+              variant="ghost"
+              className="rounded-full px-4 py-2 text-sm font-medium text-[var(--on-surface-variant)] hover:bg-[var(--surface-container-low)] hover:text-[var(--on-surface)]"
+              onClick={() => {
+                setMagicLinkTargetEmail(null);
+                setMagicLinkInfo("");
+              }}
+              disabled={disableLoginActions}
+            >
+              Back to sign-in methods
+            </Button>
+          </div>
+          <VerificationHelpText />
+          <AuthFooterMeta className="pt-8" />
+        </div>
+      </AuthCanvas>
+    );
+  }
+
+  return (
+    <AuthCanvas>
+      <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-[32rem] flex-col">
+        <AuthBrand className="mb-10" />
+        <AuthPanel>
+          <div className="mb-8">
+            <h2 className="text-2xl font-semibold tracking-[-0.02em] text-[var(--on-surface)]">
+              Welcome Back
+            </h2>
+            <p className="mt-2 text-sm text-[var(--on-surface-variant)]">
+              Please enter your details to access your workspace.
+            </p>
+          </div>
+
+          {error ? (
+            <div className="mb-6 rounded-2xl bg-[var(--error-container)] px-4 py-3 text-sm font-medium text-[var(--error)]">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>{error}</span>
+              </div>
+            </div>
+          ) : null}
+
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-[3.25rem] w-full rounded-xl border-0 bg-[var(--surface-container-high)] text-sm font-medium text-[var(--on-surface)] hover:bg-[var(--surface-container)]"
+            onClick={handleGoogleSignIn}
+            disabled={disableLoginActions}
+          >
+            {loading ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Connecting Google...
+              </>
+            ) : (
+              <>
+                <GoogleMark />
+                Continue with Google
+              </>
+            )}
+          </Button>
+
+          <div className="my-6">
+            <AuthDividerLabel label="Or use email" />
+          </div>
+
+          <form className="space-y-5" onSubmit={handlePasswordSignIn}>
+            <div>
+              <label className="label-caps mb-2 ml-1 block" htmlFor="email">
+                Work Email
+              </label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="name@company.com"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                disabled={disableLoginActions}
+                className="input-field border-0 px-4 py-3 shadow-none"
+                required
+              />
+            </div>
+
+            <div>
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <label
+                  className="label-caps ml-1 block"
+                  htmlFor="password"
+                >
+                  Password
+                </label>
+                <button
+                  type="button"
+                  onClick={() => router.push("/forgot-password")}
+                  className="text-xs font-semibold text-primary transition-colors hover:text-[var(--primary-container)]"
+                  disabled={disableLoginActions}
+                >
+                  Forgot?
+                </button>
+              </div>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="Enter your password"
+                disabled={disableLoginActions}
+                className="input-field border-0 px-4 py-3 shadow-none"
+                required
+              />
+            </div>
+
+            <Button
+              type="submit"
+              className="premium-gradient min-h-[3.25rem] w-full rounded-xl text-sm font-semibold text-[var(--on-primary)] shadow-[0_12px_28px_rgba(0,95,158,0.18)] hover:opacity-95"
+              disabled={disableLoginActions}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Signing in...
+                </>
+              ) : (
+                "Sign In to Orchestrator"
+              )}
+            </Button>
+          </form>
+
+          <div className="tonal-divider mt-8 flex flex-col gap-4 pt-6">
+            <button
+              type="button"
+              className="group flex items-center justify-between rounded-xl px-4 py-3 text-left transition-colors duration-150 hover:bg-[var(--surface-container-low)]"
+              onClick={() => void handleSendMagicLink()}
+              disabled={disableLoginActions}
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--surface-container-low)] text-primary">
+                  {isSendingMagicLink ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Mail className="h-4 w-4" />
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-[var(--on-surface)]">
+                    Email Magic Link
+                  </p>
+                  <p className="text-[11px] text-[var(--on-surface-variant)]">
+                    Sign in securely without a password
+                  </p>
+                </div>
+              </div>
+              <ArrowRight className="h-4 w-4 text-[var(--outline)] transition-transform group-hover:translate-x-1" />
+            </button>
+
+            <button
+              type="button"
+              className="group flex items-center justify-between rounded-xl px-4 py-3 text-left transition-colors duration-150 hover:bg-[var(--surface-container-low)]"
+              onClick={() => void handlePasskeySignIn()}
+              disabled={
+                disableLoginActions ||
+                !hasValidEmail ||
+                isCheckingPasskey ||
+                passkeyLookupEmail !== normalizedEmail ||
+                !hasRegisteredPasskey
+              }
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--surface-container-low)] text-primary">
+                  {isSigningInWithPasskey ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Fingerprint className="h-4 w-4" />
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-[var(--on-surface)]">
+                    Sign in with Passkey
+                  </p>
+                  <p className="text-[11px] text-[var(--on-surface-variant)]">
+                    {isCheckingPasskey
+                      ? "Checking registered passkeys for this email"
+                      : hasRegisteredPasskey
+                        ? "Use biometrics or a security key"
+                        : "Enter a valid work email to unlock passkeys"}
+                  </p>
+                </div>
+              </div>
+              <KeyRound className="h-4 w-4 text-[var(--outline)] transition-transform group-hover:translate-x-1" />
+            </button>
+          </div>
+        </AuthPanel>
+
+        <div className="mt-6 text-center text-sm text-[var(--on-surface-variant)]">
+          Don&apos;t have an account?{" "}
+          <button
+            type="button"
+            onClick={() => router.push(registerPath)}
+            className="font-semibold text-primary transition-colors hover:text-[var(--primary-container)]"
+            disabled={disableLoginActions}
+          >
+            Sign up
+          </button>
+        </div>
+
+        <AuthTrustBadges />
+        <AuthFooterMeta />
+      </div>
+    </AuthCanvas>
+  );
 }
 
 export default function Page() {
-  return null;
+  return (
+    <Suspense fallback={<LoginPageFallback />}>
+      <LoginPageContent />
+    </Suspense>
+  );
+}
+
+function LoginPageFallback() {
+  return (
+    <AuthCanvas>
+      <div className="mx-auto max-w-md">
+        <AuthBrand className="mb-10" />
+        <AuthPanel className="text-center">
+          <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--surface-container-low)] text-primary">
+            <ShieldCheck className="h-6 w-6" />
+          </div>
+          <h2 className="text-2xl font-bold tracking-[-0.02em] text-[var(--on-surface)]">
+            Loading login
+          </h2>
+          <p className="mt-3 body-md text-[var(--on-surface-variant)]">
+            Preparing the secure sign-in flow.
+          </p>
+          <div className="mt-6 inline-flex items-center gap-2 text-sm text-[var(--on-surface-variant)]">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading, please wait.
+          </div>
+        </AuthPanel>
+      </div>
+    </AuthCanvas>
+  );
 }

@@ -6,13 +6,18 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:apply-auth-schema": "node scripts/apply-auth-schema.mjs"
   },
   "dependencies": {
     "@radix-ui/react-label": "2.1.2",
+    "@radix-ui/react-popover": "^1.1.2",
+    "@radix-ui/react-select": "^2.1.2",
     "@radix-ui/react-slot": "1.1.2",
     "@react-email/components": "^1.0.8",
+    "@sentry/nextjs": "^10.45.0",
     "@supabase/supabase-js": "^2.98.0",
+    "@types/pg": "^8.20.0",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "input-otp": "1.4.2",
@@ -21,11 +26,15 @@
     "next": "16.2.1",
     "next-auth": "^5.0.0-beta.30",
     "next-passkey-webauthn": "^0.2.1",
+    "pg": "^8.20.0",
+    "pino": "^10.3.1",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "resend": "^6.9.3",
     "sonner": "2.0.3",
-    "tailwind-merge": "3.2.0"
+    "tailwind-merge": "3.2.0",
+    "zod": "^4.3.6",
+    "zustand": "^5.0.12"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

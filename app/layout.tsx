@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { SkipLink } from "@/app/components/a11y/skip-link";
+import { ThemeScript } from "@/app/components/theme/theme-script";
 import "./globals.css";
 import { Providers } from "./providers";
 
@@ -26,9 +28,16 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
+      data-theme="light"
+      data-theme-preference="system"
+      className={`${geistSans.variable} ${geistMono.variable} h-fit antialiased`}
     >
+      <head>
+        <ThemeScript />
+      </head>
       <body className="min-h-full flex flex-col">
+        <SkipLink />
         <Providers>{children}</Providers>
       </body>
     </html>

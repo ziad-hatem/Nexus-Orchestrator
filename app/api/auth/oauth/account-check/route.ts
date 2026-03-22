@@ -21,14 +21,14 @@ function normalizeAccessToken(value: unknown): string {
   return value.trim();
 }
 
-function isOpsDeskRegisteredUser(metadata: unknown): boolean {
+function isnexusorchestratorRegisteredUser(metadata: unknown): boolean {
   if (!metadata || typeof metadata !== "object") {
     return false;
   }
 
   const record = metadata as Record<string, unknown>;
   return (
-    record.registered_via_opsdesk === true ||
+    record.registered_via_nexusorchestrator === true ||
     record.created_from_invite === true ||
     Object.prototype.hasOwnProperty.call(record, "company")
   );
@@ -63,7 +63,7 @@ export async function POST(req: Request) {
     }
 
     const userId = userResult.user.id;
-    const metadataKnown = isOpsDeskRegisteredUser(userResult.user.user_metadata);
+    const metadataKnown = isnexusorchestratorRegisteredUser(userResult.user.user_metadata);
 
     const { data: userProfile, error: profileError } = await supabase
       .from("users")

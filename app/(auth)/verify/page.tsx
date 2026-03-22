@@ -1,21 +1,14 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import Image from "next/image";
-import { Button } from "../../components/ui/button";
-import { Input } from "../../components/ui/input";
-import { Label } from "../../components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "../../components/ui/card";
-import { Alert, AlertDescription } from "../../components/ui/alert";
-import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
+import {
+  AuthCanvas,
+  AuthFooterMeta,
+} from "@/app/components/auth/auth-shell";
+import { MfaPanel } from "@/app/components/auth/auth-verification-panels";
 import { isVerificationCodeValid } from "./verify-flow";
 
 function VerifyPageContent() {
@@ -24,116 +17,90 @@ function VerifyPageContent() {
   const expectedCode = searchParams.get("code") ?? "";
 
   const [code, setCode] = useState("");
-  const [result, setResult] = useState<boolean | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [verified, setVerified] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleVerify = () => {
     const isValid = isVerificationCodeValid(code, expectedCode);
-    setResult(isValid);
+    setVerified(isValid);
 
     if (isValid) {
+      setError(null);
       toast.success("Code verified");
     } else {
-      toast.error("false");
+      setError("The verification code does not match. Try again.");
+      toast.error("Verification failed");
     }
   };
 
   return (
-    <div className="min-h-screen bg-muted/50 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="flex justify-center mb-8">
-          <div className="flex items-center gap-3">
-            <div className="relative h-12 w-12 overflow-hidden rounded-xl border border-border bg-background">
-              <Image
-                src="/logo.webp"
-                alt="OpsDesk logo"
-                fill
-                className="object-cover"
-                sizes="48px"
-                priority
-              />
-            </div>
-            <span className="text-2xl font-semibold text-foreground">
-              OpsDesk
-            </span>
-          </div>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Verify your code</CardTitle>
-            <CardDescription>
-              Enter the verification code from your email.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="verification-code">Verification code</Label>
-                <Input
-                  id="verification-code"
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  placeholder="Enter code"
-                  required
-                  className="focus:ring-2 focus:ring-ring"
-                />
+    <AuthCanvas>
+      <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-md flex-col">
+        {verified ? (
+          <div className="space-y-8">
+            <div className="auth-panel rounded-[1.5rem] px-8 py-10 text-center shadow-[0_12px_32px_rgba(11,28,48,0.06)]">
+              <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--surface-container-low)] text-primary">
+                <CheckCircle2 className="h-7 w-7" />
               </div>
-
-              <Button
-                type="submit"
-                className="w-full focus:ring-2 focus:ring-ring"
+              <h1 className="text-2xl font-bold tracking-[-0.02em] text-[var(--on-surface)]">
+                Verification complete
+              </h1>
+              <p className="mt-3 body-md text-[var(--on-surface-variant)]">
+                Your code has been confirmed successfully.
+              </p>
+              <button
+                type="button"
+                className="premium-gradient mt-8 min-h-[3.25rem] w-full rounded-xl px-4 text-sm font-semibold text-[var(--on-primary)] shadow-[0_12px_28px_rgba(0,95,158,0.18)]"
+                onClick={() => router.push("/login")}
               >
-                Verify code
-              </Button>
-
-              {result === true && (
-                <div className="flex items-center justify-center text-sm text-green-700 gap-2">
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span data-testid="verification-result">true</span>
-                </div>
-              )}
-
-              {result === false && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    <span data-testid="verification-result">false</span>
-                  </AlertDescription>
-                </Alert>
-              )}
-            </form>
-
-            <div className="text-center text-sm text-muted-foreground mt-4">
+                Continue to Login
+              </button>
+            </div>
+            <AuthFooterMeta />
+          </div>
+        ) : (
+          <>
+            <MfaPanel
+              title="Verify your code"
+              description="Enter the verification code from your email to continue."
+              code={code}
+              error={error}
+              onCodeChange={setCode}
+              onVerify={handleVerify}
+              verifyLabel="Verify code"
+            />
+            <div className="mt-6 text-center text-sm text-[var(--on-surface-variant)]">
               Already verified?{" "}
               <button
                 type="button"
                 onClick={() => router.push("/login")}
-                className="text-foreground font-medium hover:underline"
+                className="font-semibold text-primary transition-colors hover:text-[var(--primary-container)]"
               >
                 Go to login
               </button>
             </div>
-          </CardContent>
-        </Card>
+            <AuthFooterMeta className="pt-8" />
+          </>
+        )}
       </div>
-    </div>
+    </AuthCanvas>
   );
 }
 
 function VerifyPageFallback() {
   return (
-    <div className="min-h-screen bg-muted/50 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Loading Verification</CardTitle>
-          <CardDescription>Preparing your verification form...</CardDescription>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          Please wait a moment.
-        </CardContent>
-      </Card>
-    </div>
+    <AuthCanvas>
+      <div className="mx-auto max-w-md">
+        <div className="auth-panel rounded-[1.5rem] px-8 py-10 text-center shadow-[0_12px_32px_rgba(11,28,48,0.06)]">
+          <h1 className="text-2xl font-bold tracking-[-0.02em] text-[var(--on-surface)]">
+            Loading verification
+          </h1>
+          <p className="mt-3 body-md text-[var(--on-surface-variant)]">
+            Preparing your verification screen.
+          </p>
+        </div>
+      </div>
+    </AuthCanvas>
   );
 }
 
@@ -144,4 +111,3 @@ export default function Page() {
     </Suspense>
   );
 }
-
