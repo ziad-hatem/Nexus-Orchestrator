@@ -13,6 +13,7 @@ const schemaFiles = [
   "db/topbar-schema.sql",
   "db/team-schema.sql",
   "db/phase-one-rbac-schema.sql",
+  "db/phase-two-workflows-schema.sql",
   "db/mfa-email-schema.sql",
   "db/passkeys-schema.sql",
 ];

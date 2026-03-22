@@ -5,6 +5,11 @@ import {
   type MembershipStatus,
   type OrganizationRole,
 } from "@/lib/server/permissions";
+import {
+  WORKFLOW_LIFECYCLE_STATUSES,
+  WORKFLOW_NODE_TYPES,
+  WORKFLOW_TRIGGER_TYPES,
+} from "@/lib/server/workflows/types";
 
 export const roleSchema = z.enum(ORGANIZATION_ROLES);
 export const membershipStatusSchema = z.enum(["active", "suspended"]);
@@ -69,6 +74,162 @@ export const auditFilterSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(50).default(20),
 });
+
+export const workflowLifecycleStatusSchema = z.enum(
+  WORKFLOW_LIFECYCLE_STATUSES,
+);
+export const workflowTriggerTypeSchema = z.enum(WORKFLOW_TRIGGER_TYPES);
+export const workflowNodeTypeSchema = z.enum(WORKFLOW_NODE_TYPES);
+
+const workflowConfigRecordSchema = z.record(z.string(), z.unknown());
+
+export const workflowMetadataSchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(2, "Workflow name must be at least 2 characters long")
+    .max(120, "Workflow name must be 120 characters or fewer"),
+  description: z
+    .string()
+    .trim()
+    .max(2000, "Workflow description is too long")
+    .optional()
+    .or(z.literal(""))
+    .transform((value) => value?.trim() ?? ""),
+  category: z
+    .string()
+    .trim()
+    .min(2, "Workflow category is required")
+    .max(80, "Workflow category is too long"),
+  tags: z
+    .array(z.string().trim().min(1).max(32))
+    .max(12, "Workflow tags cannot exceed 12 entries")
+    .default([]),
+});
+
+export const workflowTriggerConfigSchema = z.object({
+  id: z.string().trim().min(1).max(120),
+  type: workflowTriggerTypeSchema,
+  label: z.string().trim().min(1).max(120),
+  description: z.string().trim().max(400).default(""),
+  config: workflowConfigRecordSchema.default({}),
+});
+
+export const workflowConditionConfigSchema = z.object({
+  id: z.string().trim().min(1).max(120),
+  label: z.string().trim().min(1).max(120),
+  description: z.string().trim().max(400).default(""),
+  expression: z.string().trim().min(1).max(400),
+  config: workflowConfigRecordSchema.default({}),
+});
+
+export const workflowActionConfigSchema = z.object({
+  id: z.string().trim().min(1).max(120),
+  label: z.string().trim().min(1).max(120),
+  description: z.string().trim().max(400).default(""),
+  operation: z.string().trim().min(1).max(120),
+  target: z.string().trim().min(1).max(240),
+  config: workflowConfigRecordSchema.default({}),
+});
+
+export const workflowCanvasNodeSchema = z.object({
+  id: z.string().trim().min(1).max(120),
+  type: workflowNodeTypeSchema,
+  label: z.string().trim().min(1).max(120),
+  description: z.string().trim().max(400).default(""),
+  position: z.object({
+    x: z.number(),
+    y: z.number(),
+  }),
+  config: workflowConfigRecordSchema.default({}),
+});
+
+export const workflowCanvasEdgeSchema = z.object({
+  id: z.string().trim().min(1).max(200),
+  source: z.string().trim().min(1).max(120),
+  target: z.string().trim().min(1).max(120),
+});
+
+export const workflowDraftConfigSchema = z.object({
+  trigger: workflowTriggerConfigSchema.nullable(),
+  conditions: z.array(workflowConditionConfigSchema).default([]),
+  actions: z.array(workflowActionConfigSchema).default([]),
+});
+
+export const workflowCanvasSchema = z.object({
+  nodes: z.array(workflowCanvasNodeSchema).default([]),
+  edges: z.array(workflowCanvasEdgeSchema).default([]),
+});
+
+export const workflowListFilterSchema = z.object({
+  query: z
+    .string()
+    .trim()
+    .max(120)
+    .optional()
+    .transform((value) => (value ? value : undefined)),
+  status: workflowLifecycleStatusSchema.optional(),
+  category: z
+    .string()
+    .trim()
+    .max(80)
+    .optional()
+    .transform((value) => (value ? value : undefined)),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(50).default(12),
+});
+
+export const createWorkflowSchema = workflowMetadataSchema.extend({
+  triggerType: workflowTriggerTypeSchema.optional(),
+});
+
+export const updateWorkflowDraftSchema = z
+  .object({
+    metadata: workflowMetadataSchema.partial().optional(),
+    config: workflowDraftConfigSchema.partial().optional(),
+    canvas: workflowCanvasSchema.optional(),
+  })
+  .refine(
+    (value) =>
+      value.metadata !== undefined ||
+      value.config !== undefined ||
+      value.canvas !== undefined,
+    {
+      message: "At least one workflow draft section must be provided",
+      path: ["metadata"],
+    },
+  );
+
+export const publishWorkflowSchema = z.object({
+  notes: z
+    .string()
+    .trim()
+    .max(500, "Publish notes must be 500 characters or fewer")
+    .optional()
+    .or(z.literal(""))
+    .transform((value) => (typeof value === "string" ? value.trim() : "")),
+});
+
+export const archiveWorkflowSchema = z.object({
+  reason: z
+    .string()
+    .trim()
+    .max(500, "Archive reason must be 500 characters or fewer")
+    .optional()
+    .or(z.literal(""))
+    .transform((value) => (typeof value === "string" ? value.trim() : "")),
+});
+
+export const workflowIdSchema = z
+  .string()
+  .trim()
+  .min(4, "Workflow id is required")
+  .max(64, "Workflow id is too long");
+
+export const workflowVersionNumberSchema = z.coerce
+  .number()
+  .int()
+  .min(1, "Workflow version is invalid");
 
 export const orgSlugSchema = z
   .string()

@@ -14,6 +14,14 @@ import type {
   DashboardSummary,
   UserOrganizationMembership,
 } from "@/lib/server/org-service";
+import type {
+  WorkflowDetail,
+  WorkflowDraftState,
+  WorkflowLifecycleStatus,
+  WorkflowPublishedSnapshot,
+  WorkflowSummary,
+  WorkflowVersionSummary,
+} from "@/lib/server/workflows/types";
 
 export type SessionUserState = {
   id: string;
@@ -39,6 +47,12 @@ export type AuditFeedFilters = {
   action?: string;
 };
 
+export type WorkflowDirectoryFilters = {
+  query?: string;
+  status?: WorkflowLifecycleStatus;
+  category?: string;
+};
+
 type WorkspaceStoreState = {
   hydrated: boolean;
   sessionUser: SessionUserState | null;
@@ -58,6 +72,16 @@ type WorkspaceStoreState = {
   auditPageSize: number;
   auditFilters: AuditFeedFilters;
   auditAvailableActions: string[];
+  workflowItems: WorkflowSummary[];
+  workflowTotal: number;
+  workflowPage: number;
+  workflowPageSize: number;
+  workflowFilters: WorkflowDirectoryFilters;
+  workflowCategories: string[];
+  activeWorkflowDetail: WorkflowDetail | null;
+  activeWorkflowDraft: WorkflowDraftState | null;
+  workflowVersions: WorkflowVersionSummary[];
+  activeWorkflowVersion: WorkflowPublishedSnapshot | null;
   setSessionUser: (sessionUser: SessionUserState | null) => void;
   setMemberships: (memberships: UserOrganizationMembership[]) => void;
   setWorkspace: (payload: {
@@ -90,6 +114,18 @@ type WorkspaceStoreState = {
     filters: AuditFeedFilters;
     availableActions: string[];
   }) => void;
+  setWorkflowDirectory: (payload: {
+    items: WorkflowSummary[];
+    total: number;
+    page: number;
+    pageSize: number;
+    filters: WorkflowDirectoryFilters;
+    categories: string[];
+  }) => void;
+  setWorkflowDetail: (detail: WorkflowDetail | null) => void;
+  setWorkflowDraft: (draft: WorkflowDraftState | null) => void;
+  setWorkflowVersions: (versions: WorkflowVersionSummary[]) => void;
+  setWorkflowVersion: (version: WorkflowPublishedSnapshot | null) => void;
   clearWorkspace: () => void;
 };
 
@@ -101,6 +137,7 @@ const emptyProfile: WorkspaceProfile = {
 
 const emptyTeamFilters: TeamDirectoryFilters = {};
 const emptyAuditFilters: AuditFeedFilters = {};
+const emptyWorkflowFilters: WorkflowDirectoryFilters = {};
 
 const orgScopedInitialState = {
   dashboardSummary: null as DashboardSummary | null,
@@ -114,6 +151,16 @@ const orgScopedInitialState = {
   auditPageSize: 20,
   auditFilters: emptyAuditFilters,
   auditAvailableActions: [] as string[],
+  workflowItems: [] as WorkflowSummary[],
+  workflowTotal: 0,
+  workflowPage: 1,
+  workflowPageSize: 12,
+  workflowFilters: emptyWorkflowFilters,
+  workflowCategories: [] as string[],
+  activeWorkflowDetail: null as WorkflowDetail | null,
+  activeWorkflowDraft: null as WorkflowDraftState | null,
+  workflowVersions: [] as WorkflowVersionSummary[],
+  activeWorkflowVersion: null as WorkflowPublishedSnapshot | null,
 };
 
 const initialState = {
@@ -240,6 +287,41 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set) => ({
       auditPageSize: payload.pageSize,
       auditFilters: payload.filters,
       auditAvailableActions: payload.availableActions,
+    })),
+  setWorkflowDirectory: (payload) =>
+    set((state) => ({
+      ...state,
+      hydrated: true,
+      workflowItems: payload.items,
+      workflowTotal: payload.total,
+      workflowPage: payload.page,
+      workflowPageSize: payload.pageSize,
+      workflowFilters: payload.filters,
+      workflowCategories: payload.categories,
+    })),
+  setWorkflowDetail: (detail) =>
+    set((state) => ({
+      ...state,
+      hydrated: true,
+      activeWorkflowDetail: detail,
+    })),
+  setWorkflowDraft: (draft) =>
+    set((state) => ({
+      ...state,
+      hydrated: true,
+      activeWorkflowDraft: draft,
+    })),
+  setWorkflowVersions: (versions) =>
+    set((state) => ({
+      ...state,
+      hydrated: true,
+      workflowVersions: versions,
+    })),
+  setWorkflowVersion: (version) =>
+    set((state) => ({
+      ...state,
+      hydrated: true,
+      activeWorkflowVersion: version,
     })),
   clearWorkspace: () => ({
     ...initialState,

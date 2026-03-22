@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, ShieldCheck, UserRound, Users2 } from "lucide-react";
+import {
+  GitBranch,
+  LayoutDashboard,
+  ShieldCheck,
+  UserRound,
+  Users2,
+} from "lucide-react";
 
 type NavItem = {
   href: string;
@@ -53,6 +59,11 @@ export function WorkspaceNav({
       href: basePath,
       label: "Dashboard",
       icon: LayoutDashboard,
+    },
+    {
+      href: `${basePath}/workflows`,
+      label: "Workflows",
+      icon: GitBranch,
     },
     ...(canManageMembers
       ? [

@@ -11,6 +11,10 @@ export type MembershipStatus = "active" | "suspended";
 export type PermissionSet = {
   role: OrganizationRole;
   canAccessDashboard: boolean;
+  canViewWorkflows: boolean;
+  canEditWorkflows: boolean;
+  canPublishWorkflows: boolean;
+  canArchiveWorkflows: boolean;
   canManageMembers: boolean;
   canCreateInvites: boolean;
   canViewAuditLogs: boolean;
@@ -21,6 +25,10 @@ const PERMISSIONS_BY_ROLE: Record<OrganizationRole, PermissionSet> = {
   org_admin: {
     role: "org_admin",
     canAccessDashboard: true,
+    canViewWorkflows: true,
+    canEditWorkflows: true,
+    canPublishWorkflows: true,
+    canArchiveWorkflows: true,
     canManageMembers: true,
     canCreateInvites: true,
     canViewAuditLogs: true,
@@ -29,6 +37,10 @@ const PERMISSIONS_BY_ROLE: Record<OrganizationRole, PermissionSet> = {
   workflow_editor: {
     role: "workflow_editor",
     canAccessDashboard: true,
+    canViewWorkflows: true,
+    canEditWorkflows: true,
+    canPublishWorkflows: true,
+    canArchiveWorkflows: true,
     canManageMembers: false,
     canCreateInvites: false,
     canViewAuditLogs: false,
@@ -37,6 +49,10 @@ const PERMISSIONS_BY_ROLE: Record<OrganizationRole, PermissionSet> = {
   operator: {
     role: "operator",
     canAccessDashboard: true,
+    canViewWorkflows: true,
+    canEditWorkflows: false,
+    canPublishWorkflows: false,
+    canArchiveWorkflows: false,
     canManageMembers: false,
     canCreateInvites: false,
     canViewAuditLogs: true,
@@ -45,6 +61,10 @@ const PERMISSIONS_BY_ROLE: Record<OrganizationRole, PermissionSet> = {
   viewer: {
     role: "viewer",
     canAccessDashboard: true,
+    canViewWorkflows: true,
+    canEditWorkflows: false,
+    canPublishWorkflows: false,
+    canArchiveWorkflows: false,
     canManageMembers: false,
     canCreateInvites: false,
     canViewAuditLogs: false,
@@ -80,6 +100,22 @@ export function canAccessDashboard(role: OrganizationRole): boolean {
 
 export function canManageMembers(role: OrganizationRole): boolean {
   return getRolePermissions(role).canManageMembers;
+}
+
+export function canViewWorkflows(role: OrganizationRole): boolean {
+  return getRolePermissions(role).canViewWorkflows;
+}
+
+export function canEditWorkflows(role: OrganizationRole): boolean {
+  return getRolePermissions(role).canEditWorkflows;
+}
+
+export function canPublishWorkflows(role: OrganizationRole): boolean {
+  return getRolePermissions(role).canPublishWorkflows;
+}
+
+export function canArchiveWorkflows(role: OrganizationRole): boolean {
+  return getRolePermissions(role).canArchiveWorkflows;
 }
 
 export function canCreateInvites(role: OrganizationRole): boolean {

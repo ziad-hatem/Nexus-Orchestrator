@@ -47,7 +47,7 @@ function SelectContent({
         data-slot="select-content"
         position={position}
         className={cn(
-          "glass-panel-strong relative z-50 max-h-80 min-w-[14rem] overflow-hidden rounded-2xl",
+          "glass-panel-strong relative z-[220] max-h-80 min-w-[14rem] overflow-hidden rounded-2xl",
           position === "popper" &&
             "data-[side=bottom]:translate-y-2 data-[side=left]:-translate-x-2 data-[side=right]:translate-x-2 data-[side=top]:-translate-y-2",
           className,
