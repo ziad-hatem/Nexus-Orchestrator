@@ -16,6 +16,7 @@ import { WorkflowValidationPanel } from "@/app/components/workflows/workflow-val
 import {
   createWorkflowActionDefinition,
   createWorkflowEntityId,
+  createWorkflowConditionDefinition,
   syncWorkflowDraftCanvas,
   type WorkflowActionConfig,
   type WorkflowCanvas,
@@ -26,6 +27,7 @@ import {
   type WorkflowNodeType,
   type WorkflowTriggerConfig,
 } from "@/lib/server/workflows/types";
+import { validateWorkflowDraftDocument } from "@/lib/server/workflows/validation";
 
 type WorkflowCanvasEditorProps = {
   orgSlug: string;
@@ -112,9 +114,6 @@ export function WorkflowCanvasEditor({
   const [draft, setDraft] = useState<WorkflowDraftDocument>(
     initialRenderableDraft,
   );
-  const [validationIssues, setValidationIssues] = useState(
-    initialDraft.validationIssues,
-  );
   const [updatedAt, setUpdatedAt] = useState(initialDraft.updatedAt);
   const [updatedBy, setUpdatedBy] = useState(initialDraft.updatedBy);
   const [status, setStatus] = useState(initialDraft.status);
@@ -179,6 +178,10 @@ export function WorkflowCanvasEditor({
   const isDirty = useMemo(
     () => JSON.stringify(draft) !== savedFingerprint,
     [draft, savedFingerprint],
+  );
+  const validationIssues = useMemo(
+    () => validateWorkflowDraftDocument(draft),
+    [draft],
   );
 
   const updateDraft = (
@@ -288,6 +291,7 @@ export function WorkflowCanvasEditor({
     position?: WorkflowCanvas["nodes"][number]["position"],
   ): string => {
     const newConditionId = createWorkflowEntityId("condition");
+    const condition = createWorkflowConditionDefinition();
     updateDraft((current) => ({
       ...current,
       config: {
@@ -295,11 +299,8 @@ export function WorkflowCanvasEditor({
         conditions: [
           ...current.config.conditions,
           {
+            ...condition,
             id: newConditionId,
-            label: "New condition",
-            description: "",
-            expression: "",
-            config: {},
           },
         ],
       },
@@ -307,10 +308,16 @@ export function WorkflowCanvasEditor({
         ? appendCanvasNode(current.canvas, {
             id: newConditionId,
             type: "condition",
-            label: "New condition",
-            description: "",
+            label: condition.label,
+            description: condition.description,
             position,
-            config: {},
+            config: {
+              resolverScope: condition.resolver.scope,
+              resolverPath: condition.resolver.path,
+              operator: condition.operator,
+              value: condition.value,
+              legacyIssue: condition.legacyIssue,
+            },
           })
         : current.canvas,
     }));
@@ -421,7 +428,6 @@ export function WorkflowCanvasEditor({
 
       const normalizedDraft = ensureDraftHasRenderableCanvas(payload.draft.draft);
       setDraft(normalizedDraft);
-      setValidationIssues(payload.draft.validationIssues);
       setUpdatedAt(payload.draft.updatedAt);
       setUpdatedBy(payload.draft.updatedBy);
       setStatus(payload.draft.status);
@@ -495,7 +501,7 @@ export function WorkflowCanvasEditor({
             {draft.metadata.name || "Untitled workflow"}
           </h1>
           <p className="mt-2 text-sm leading-6 text-[rgba(255,255,255,0.82)]">
-            Build the entire flow here: drag nodes, connect paths, edit metadata, inspect validation, and publish only when the graph is production-ready.
+            Build the entire flow here: drag nodes, connect pass paths, edit typed conditions and actions, inspect validation, and publish only when the graph is production-ready.
           </p>
         </div>
 

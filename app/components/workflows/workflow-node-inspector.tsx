@@ -23,12 +23,16 @@ import type {
   WorkflowActionConfig,
   WorkflowActionType,
   WorkflowConditionConfig,
+  WorkflowConditionOperator,
+  WorkflowConditionResolverScope,
+  WorkflowConditionValue,
   WorkflowDraftDocument,
   WorkflowTriggerConfig,
   ValidationIssue,
 } from "@/lib/server/workflows/types";
 import {
   createDefaultWorkflowActionConfig,
+  getWorkflowConditionOperatorLabel,
   getWorkflowActionTypeLabel,
 } from "@/lib/server/workflows/types";
 
@@ -132,6 +136,68 @@ function getActionCompletionState(action: WorkflowActionConfig): {
   };
 }
 
+type ConditionValueKind = "string" | "number" | "boolean" | "null";
+
+function getConditionValueKind(value: WorkflowConditionValue): ConditionValueKind {
+  if (value === null) {
+    return "null";
+  }
+
+  if (typeof value === "number") {
+    return "number";
+  }
+
+  if (typeof value === "boolean") {
+    return "boolean";
+  }
+
+  return "string";
+}
+
+function getConditionValueInputValue(
+  value: WorkflowConditionValue,
+  kind: ConditionValueKind,
+): string {
+  if (kind === "number") {
+    return typeof value === "number" ? String(value) : "";
+  }
+
+  if (kind === "boolean") {
+    return value === true ? "true" : "false";
+  }
+
+  if (kind === "null") {
+    return "";
+  }
+
+  return typeof value === "string" ? value : "";
+}
+
+function parseConditionValueFromInput(
+  kind: ConditionValueKind,
+  rawValue: string,
+): WorkflowConditionValue {
+  if (kind === "number") {
+    const trimmed = rawValue.trim();
+    if (!trimmed) {
+      return "";
+    }
+
+    const numeric = Number(trimmed);
+    return Number.isFinite(numeric) ? numeric : "";
+  }
+
+  if (kind === "boolean") {
+    return rawValue === "true";
+  }
+
+  if (kind === "null") {
+    return null;
+  }
+
+  return rawValue;
+}
+
 export function WorkflowNodeInspector({
   draft,
   selectedNodeId,
@@ -153,6 +219,9 @@ export function WorkflowNodeInspector({
     (action) => action.id === selectedNodeId,
   );
   const [copiedWebhookUrl, setCopiedWebhookUrl] = useState(false);
+  const [conditionValueKinds, setConditionValueKinds] = useState<
+    Record<string, ConditionValueKind>
+  >({});
   const browserOrigin = useSyncExternalStore(
     () => () => undefined,
     () => window.location.origin,
@@ -192,26 +261,11 @@ export function WorkflowNodeInspector({
         : { complete: false, missing: [] },
     [selectedAction],
   );
-  const selectedConditionBranchState = useMemo(() => {
-    if (!selectedCondition) {
-      return null;
-    }
-
-    const trueCount = draft.canvas.edges.filter(
-      (edge) =>
-        edge.source === selectedCondition.id && edge.branchKey === "true",
-    ).length;
-    const falseCount = draft.canvas.edges.filter(
-      (edge) =>
-        edge.source === selectedCondition.id && edge.branchKey === "false",
-    ).length;
-
-    return {
-      trueCount,
-      falseCount,
-      ready: trueCount === 1 && falseCount === 1,
-    };
-  }, [draft.canvas.edges, selectedCondition]);
+  const conditionValueKind =
+    selectedCondition
+      ? conditionValueKinds[selectedCondition.id] ??
+        getConditionValueKind(selectedCondition.value)
+      : "string";
 
   useEffect(() => {
     if (!copiedWebhookUrl) {
@@ -224,7 +278,6 @@ export function WorkflowNodeInspector({
 
     return () => window.clearTimeout(timeout);
   }, [copiedWebhookUrl]);
-
   const handleCopyWebhookUrl = async () => {
     if (!webhookUrl) {
       return;
@@ -500,7 +553,7 @@ export function WorkflowNodeInspector({
                     Condition node
                   </p>
                   <p className="mt-1 text-xs text-[var(--on-surface-variant)]">
-                    Conditions define the rule gates between the trigger and downstream actions.
+                    Conditions gate the workflow. If the rule passes, execution continues. If not, the run ends cleanly before any action executes.
                   </p>
                 </div>
               </div>
@@ -548,53 +601,251 @@ export function WorkflowNodeInspector({
                   description: event.target.value,
                 })
               }
-              placeholder="Describe what this branch checks before continuing"
+              placeholder="Describe the business rule this gate checks before continuing"
               className="min-h-24 w-full rounded-[1.1rem] border border-[color:color-mix(in_srgb,var(--outline-variant)_56%,transparent)] bg-[var(--input-background)] px-4 py-3 text-sm text-[var(--on-surface)] outline-none transition focus:border-primary/40 focus:ring-4 focus:ring-primary/10"
             />
           </div>
 
-          <div>
-            <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-condition-expression">
-              Expression
-            </label>
-            <Input
-              id="workflow-condition-expression"
-              value={selectedCondition.expression}
-              disabled={disabled}
-              onChange={(event) =>
-                onChangeCondition(selectedCondition.id, {
-                  expression: event.target.value,
-                })
-              }
-              placeholder="payload.amount > 1000"
-              className="input-field border-0 shadow-none font-mono"
-            />
-          </div>
-
-          {selectedConditionBranchState ? (
-            <div className="rounded-[1.5rem] bg-[var(--surface-container-low)] p-5">
-              <p className="label-caps">Branch contract</p>
-              <p className="mt-2 text-sm font-semibold text-[var(--on-surface)]">
-                {selectedConditionBranchState.ready
-                  ? "True and false branches are both connected."
-                  : "This condition still needs one true branch and one false branch."}
+          {selectedCondition.legacyIssue ? (
+            <div className="rounded-[1.5rem] border border-[color:color-mix(in_srgb,var(--error)_18%,transparent)] bg-[color:color-mix(in_srgb,var(--error-container)_82%,transparent)] p-5">
+              <p className="label-caps text-[var(--error)]">Legacy rule needs repair</p>
+              <p className="mt-2 text-sm leading-6 text-[var(--on-surface)]">
+                {selectedCondition.legacyIssue}
               </p>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-2xl bg-[var(--surface-container-lowest)] p-4">
-                  <p className="label-caps">True path</p>
-                  <p className="mt-2 text-sm font-semibold text-[var(--on-surface)]">
-                    {selectedConditionBranchState.trueCount} connected
-                  </p>
-                </div>
-                <div className="rounded-2xl bg-[var(--surface-container-lowest)] p-4">
-                  <p className="label-caps">False path</p>
-                  <p className="mt-2 text-sm font-semibold text-[var(--on-surface)]">
-                    {selectedConditionBranchState.falseCount} connected
-                  </p>
-                </div>
-              </div>
+              {selectedCondition.legacyExpression ? (
+                <p className="mt-2 text-xs font-medium text-[var(--on-surface-variant)]">
+                  Previous expression:{" "}
+                  <span className="font-mono text-[var(--on-surface)]">
+                    {selectedCondition.legacyExpression}
+                  </span>
+                </p>
+              ) : null}
             </div>
           ) : null}
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-condition-scope">
+                Resolver source
+              </label>
+              <Select
+                value={selectedCondition.resolver.scope}
+                disabled={disabled}
+                onValueChange={(value) =>
+                  onChangeCondition(selectedCondition.id, {
+                    resolver: {
+                      ...selectedCondition.resolver,
+                      scope: value as WorkflowConditionResolverScope,
+                    },
+                    legacyExpression: null,
+                    legacyIssue: null,
+                  })
+                }
+              >
+                <SelectTrigger id="workflow-condition-scope">
+                  <SelectValue placeholder="Choose a source" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="payload">Payload</SelectItem>
+                  <SelectItem value="context">Context</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-condition-path">
+                Field path
+              </label>
+              <Input
+                id="workflow-condition-path"
+                value={selectedCondition.resolver.path}
+                disabled={disabled}
+                onChange={(event) =>
+                  onChangeCondition(selectedCondition.id, {
+                    resolver: {
+                      ...selectedCondition.resolver,
+                      path: event.target.value,
+                    },
+                    legacyExpression: null,
+                    legacyIssue: null,
+                  })
+                }
+                placeholder="amount.total"
+                className="input-field border-0 shadow-none font-mono"
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-condition-operator">
+                Operator
+              </label>
+              <Select
+                value={selectedCondition.operator}
+                disabled={disabled}
+                onValueChange={(value) =>
+                  onChangeCondition(selectedCondition.id, {
+                    operator: value as WorkflowConditionOperator,
+                    value:
+                      value === "exists"
+                        ? null
+                        : selectedCondition.operator === "exists"
+                          ? ""
+                          : selectedCondition.value,
+                    legacyExpression: null,
+                    legacyIssue: null,
+                  })
+                }
+              >
+                <SelectTrigger id="workflow-condition-operator">
+                  <SelectValue placeholder="Choose an operator" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="equals">
+                    {getWorkflowConditionOperatorLabel("equals")}
+                  </SelectItem>
+                  <SelectItem value="not_equals">
+                    {getWorkflowConditionOperatorLabel("not_equals")}
+                  </SelectItem>
+                  <SelectItem value="contains">
+                    {getWorkflowConditionOperatorLabel("contains")}
+                  </SelectItem>
+                  <SelectItem value="greater_than">
+                    {getWorkflowConditionOperatorLabel("greater_than")}
+                  </SelectItem>
+                  <SelectItem value="less_than">
+                    {getWorkflowConditionOperatorLabel("less_than")}
+                  </SelectItem>
+                  <SelectItem value="exists">
+                    {getWorkflowConditionOperatorLabel("exists")}
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {selectedCondition.operator !== "exists" ? (
+              <div>
+                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-condition-value-kind">
+                  Comparison value type
+                </label>
+                <Select
+                  value={conditionValueKind}
+                  disabled={disabled}
+                  onValueChange={(value) => {
+                    const nextKind = value as ConditionValueKind;
+                    setConditionValueKinds((current) => ({
+                      ...current,
+                      [selectedCondition.id]: nextKind,
+                    }));
+                    onChangeCondition(selectedCondition.id, {
+                      value: parseConditionValueFromInput(nextKind, ""),
+                      legacyExpression: null,
+                      legacyIssue: null,
+                    });
+                  }}
+                >
+                  <SelectTrigger id="workflow-condition-value-kind">
+                    <SelectValue placeholder="Choose a value type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="string">Text</SelectItem>
+                    <SelectItem value="number">Number</SelectItem>
+                    <SelectItem value="boolean">Boolean</SelectItem>
+                    <SelectItem value="null">Null</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <div className="rounded-[1.25rem] bg-[var(--surface-container-low)] px-4 py-4 text-sm leading-6 text-[var(--on-surface-variant)]">
+                <p className="label-caps">Comparison value</p>
+                <p className="mt-2">
+                  The <span className="font-semibold text-[var(--on-surface)]">exists</span> operator only checks whether the field is present, so no comparison value is needed.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {selectedCondition.operator !== "exists" ? (
+            conditionValueKind === "boolean" ? (
+              <div>
+                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-condition-value-boolean">
+                  Comparison value
+                </label>
+                <Select
+                  value={getConditionValueInputValue(
+                    selectedCondition.value,
+                    "boolean",
+                  )}
+                  disabled={disabled}
+                  onValueChange={(value) =>
+                    onChangeCondition(selectedCondition.id, {
+                      value: parseConditionValueFromInput("boolean", value),
+                      legacyExpression: null,
+                      legacyIssue: null,
+                    })
+                  }
+                >
+                  <SelectTrigger id="workflow-condition-value-boolean">
+                    <SelectValue placeholder="Choose a value" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="true">True</SelectItem>
+                    <SelectItem value="false">False</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : conditionValueKind === "null" ? (
+              <div className="rounded-[1.25rem] bg-[var(--surface-container-low)] px-4 py-4 text-sm leading-6 text-[var(--on-surface-variant)]">
+                <p className="label-caps">Comparison value</p>
+                <p className="mt-2">
+                  This rule compares the resolved field against{" "}
+                  <span className="font-mono text-[var(--on-surface)]">null</span>.
+                </p>
+              </div>
+            ) : (
+              <div>
+                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-condition-value">
+                  Comparison value
+                </label>
+                <Input
+                  id="workflow-condition-value"
+                  type={conditionValueKind === "number" ? "number" : "text"}
+                  value={getConditionValueInputValue(
+                    selectedCondition.value,
+                    conditionValueKind,
+                  )}
+                  disabled={disabled}
+                  onChange={(event) =>
+                    onChangeCondition(selectedCondition.id, {
+                      value: parseConditionValueFromInput(
+                        conditionValueKind,
+                        event.target.value,
+                      ),
+                      legacyExpression: null,
+                      legacyIssue: null,
+                    })
+                  }
+                  placeholder={
+                    conditionValueKind === "number"
+                      ? "1000"
+                      : "approved"
+                  }
+                  className="input-field border-0 shadow-none"
+                />
+              </div>
+            )
+          ) : null}
+
+          <div className="rounded-[1.5rem] bg-[var(--surface-container-low)] p-5">
+            <p className="label-caps">Execution behavior</p>
+            <p className="mt-2 text-sm font-semibold text-[var(--on-surface)]">
+              A matching rule continues along the connected pass path.
+            </p>
+            <p className="mt-2 text-sm leading-6 text-[var(--on-surface-variant)]">
+              When the rule does not match, the run ends successfully with a condition-not-met result and skips all downstream actions.
+            </p>
+          </div>
         </div>
       ) : null}
 

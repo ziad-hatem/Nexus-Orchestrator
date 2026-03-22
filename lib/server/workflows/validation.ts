@@ -1,12 +1,13 @@
 import {
   isInternalEventKey,
-  isWorkflowConditionBranchKey,
+  isWorkflowConditionOperator,
+  isWorkflowConditionResolverScope,
   type ValidationIssue,
   type WorkflowActionConfig,
-  type WorkflowCanvasEdge,
+  type WorkflowConditionConfig,
   type WorkflowDraftDocument,
 } from "@/lib/server/workflows/types";
-import { tryParseConditionExpression } from "@/lib/server/executions/condition-dsl";
+import { isValidConditionResolverPath } from "@/lib/server/conditions/resolver";
 import { normalizeWebhookPath } from "@/lib/server/validation";
 
 function pushIssue(
@@ -162,12 +163,77 @@ function validateActionConfig(
   }
 }
 
-function isBranchEdgeFor(
-  edge: WorkflowCanvasEdge,
-  nodeId: string,
-  branchKey: "true" | "false",
-) {
-  return edge.source === nodeId && edge.branchKey === branchKey;
+function validateConditionConfig(
+  condition: WorkflowConditionConfig,
+  issues: ValidationIssue[],
+): void {
+  if (!condition.label.trim()) {
+    pushIssue(issues, {
+      path: `config.conditions.${condition.id}.label`,
+      code: "missing_condition_label",
+      message: "Condition label is required.",
+      severity: "error",
+    });
+  }
+
+  if (condition.legacyIssue) {
+    pushIssue(issues, {
+      path: `config.conditions.${condition.id}.legacyExpression`,
+      code: "legacy_condition_expression",
+      message: condition.legacyIssue,
+      severity: "error",
+    });
+  }
+
+  if (!isWorkflowConditionResolverScope(condition.resolver.scope)) {
+    pushIssue(issues, {
+      path: `config.conditions.${condition.id}.resolver.scope`,
+      code: "invalid_condition_scope",
+      message: "Conditions must resolve from payload or context.",
+      severity: "error",
+    });
+  }
+
+  if (!condition.resolver.path.trim()) {
+    pushIssue(issues, {
+      path: `config.conditions.${condition.id}.resolver.path`,
+      code: "missing_condition_resolver_path",
+      message: "Condition field path is required.",
+      severity: "error",
+    });
+  } else if (!isValidConditionResolverPath(condition.resolver.path)) {
+    pushIssue(issues, {
+      path: `config.conditions.${condition.id}.resolver.path`,
+      code: "invalid_condition_resolver_path",
+      message:
+        "Condition field paths may only use letters, numbers, dots, dashes, and underscores.",
+      severity: "error",
+    });
+  }
+
+  if (!isWorkflowConditionOperator(condition.operator)) {
+    pushIssue(issues, {
+      path: `config.conditions.${condition.id}.operator`,
+      code: "invalid_condition_operator",
+      message: "Condition operator is not supported.",
+      severity: "error",
+    });
+    return;
+  }
+
+  if (
+    (condition.operator === "greater_than" ||
+      condition.operator === "less_than") &&
+    typeof condition.value !== "number"
+  ) {
+    pushIssue(issues, {
+      path: `config.conditions.${condition.id}.value`,
+      code: "invalid_condition_numeric_value",
+      message:
+        "Greater than and less than conditions require a numeric comparison value.",
+      severity: "error",
+    });
+  }
 }
 
 export function validateWorkflowDraftDocument(
@@ -261,34 +327,7 @@ export function validateWorkflowDraftDocument(
 
   draft.config.conditions.forEach((condition) => {
     expectedNodeTypes.set(condition.id, "condition");
-
-    if (!condition.label.trim()) {
-      pushIssue(issues, {
-        path: `config.conditions.${condition.id}.label`,
-        code: "missing_condition_label",
-        message: "Condition label is required.",
-        severity: "error",
-      });
-    }
-
-    if (!condition.expression.trim()) {
-      pushIssue(issues, {
-        path: `config.conditions.${condition.id}.expression`,
-        code: "missing_condition_expression",
-        message: "Condition expression is required.",
-        severity: "error",
-      });
-    } else {
-      const parsedExpression = tryParseConditionExpression(condition.expression);
-      if (!parsedExpression.success) {
-        pushIssue(issues, {
-          path: `config.conditions.${condition.id}.expression`,
-          code: "invalid_condition_expression",
-          message: parsedExpression.error,
-          severity: "error",
-        });
-      }
-    }
+    validateConditionConfig(condition, issues);
   });
 
   if (draft.config.actions.length === 0) {
@@ -407,20 +446,12 @@ export function validateWorkflowDraftDocument(
       });
     }
 
-    if (sourceNode.type === "condition") {
-      if (!isWorkflowConditionBranchKey(edge.branchKey)) {
-        pushIssue(issues, {
-          path: `canvas.edges.${edge.id}.branchKey`,
-          code: "missing_condition_branch_key",
-          message: "Condition edges must be labeled true or false.",
-          severity: "error",
-        });
-      }
-    } else if (edge.branchKey !== null) {
+    if (edge.branchKey !== null) {
       pushIssue(issues, {
         path: `canvas.edges.${edge.id}.branchKey`,
-        code: "unexpected_branch_key",
-        message: "Only condition edges can carry branch labels.",
+        code: "legacy_condition_branch_key",
+        message:
+          "Condition branch labels are legacy-only. Reconnect this condition as a single pass path.",
         severity: "error",
       });
     }
@@ -454,27 +485,15 @@ export function validateWorkflowDraftDocument(
   }
 
   for (const condition of draft.config.conditions) {
-    const trueEdges = draft.canvas.edges.filter((edge) =>
-      isBranchEdgeFor(edge, condition.id, "true"),
-    );
-    const falseEdges = draft.canvas.edges.filter((edge) =>
-      isBranchEdgeFor(edge, condition.id, "false"),
+    const outgoingEdges = draft.canvas.edges.filter(
+      (edge) => edge.source === condition.id,
     );
 
-    if (trueEdges.length !== 1) {
+    if (outgoingEdges.length !== 1) {
       pushIssue(issues, {
-        path: `canvas.nodes.${condition.id}.branches.true`,
-        code: "invalid_true_branch_count",
-        message: "Condition nodes must connect exactly one true branch.",
-        severity: "error",
-      });
-    }
-
-    if (falseEdges.length !== 1) {
-      pushIssue(issues, {
-        path: `canvas.nodes.${condition.id}.branches.false`,
-        code: "invalid_false_branch_count",
-        message: "Condition nodes must connect exactly one false branch.",
+        path: `canvas.nodes.${condition.id}.outgoing`,
+        code: "invalid_condition_outgoing_count",
+        message: "Condition nodes must connect exactly one pass path.",
         severity: "error",
       });
     }

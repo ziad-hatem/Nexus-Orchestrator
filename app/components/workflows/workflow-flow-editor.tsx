@@ -145,7 +145,7 @@ export function WorkflowFlowEditor({
           <NodePaletteCard
             nodeType="condition"
             title="Condition"
-            description="Branch flow based on validation or payload rules."
+            description="Gate the flow with a payload or context rule before actions continue."
           />
           <NodePaletteCard
             nodeType="action"
@@ -166,7 +166,7 @@ export function WorkflowFlowEditor({
               <p className="mt-2 text-xs leading-5 text-[var(--on-surface-variant)]">
                 React Flow now powers the board, so you can drag nodes freely,
                 connect from the glowing handles, and keep editing inside the
-                popup inspector.
+                popup inspector without managing extra branch labels.
               </p>
             </div>
           </div>

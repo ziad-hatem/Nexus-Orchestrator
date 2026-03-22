@@ -1,13 +1,30 @@
-import type {
-  ConditionEvaluationResult,
-  ParsedConditionExpression,
-} from "@/lib/server/executions/types";
 import type { WorkflowSourceContext } from "@/lib/server/workflows/types";
 
 const SUBJECT_PATTERN = /^(payload|context)\.[A-Za-z0-9_.-]+$/;
 const VALUE_OPERATORS = ["==", "!=", ">=", "<=", ">", "<", "contains"] as const;
 
-type SupportedOperator = ParsedConditionExpression["operator"];
+type SupportedOperator =
+  | "=="
+  | "!="
+  | ">"
+  | ">="
+  | "<"
+  | "<="
+  | "contains"
+  | "exists";
+
+type ParsedConditionExpression = {
+  raw: string;
+  subject: string;
+  operator: SupportedOperator;
+  value?: string | number | boolean | null;
+};
+
+type ConditionEvaluationResult = {
+  parsed: ParsedConditionExpression;
+  passed: boolean;
+  resolvedValue: unknown;
+};
 
 export class ConditionDslParseError extends Error {}
 

@@ -1,5 +1,8 @@
 import type {
   WorkflowConditionBranchKey,
+  WorkflowConditionOperator,
+  WorkflowConditionResolverScope,
+  WorkflowConditionValue,
   WorkflowRunDetail as AppWorkflowRunDetail,
   WorkflowRunStepStatus as AppWorkflowRunStepStatus,
   WorkflowRunSummary as AppWorkflowRunSummary,
@@ -124,6 +127,27 @@ export type ExecutionStepLog = {
   data?: Record<string, unknown>;
 };
 
+export type WorkflowConditionStepOutput = {
+  matched: boolean;
+  resolverScope: WorkflowConditionResolverScope;
+  resolverPath: string;
+  operator: WorkflowConditionOperator;
+  expectedValue: WorkflowConditionValue | null;
+  resolvedValue: unknown;
+  terminationReason: "condition_not_met" | null;
+  nextNodeId: string | null;
+};
+
+export type WorkflowConditionStepLogData = {
+  matched: boolean;
+  resolverScope: WorkflowConditionResolverScope;
+  resolverPath: string;
+  operator: WorkflowConditionOperator;
+  expectedValue: WorkflowConditionValue | null;
+  resolvedValue: unknown;
+  terminationReason: "condition_not_met" | null;
+};
+
 export type StepExecutionRecordInput = {
   runId: string;
   organizationId: string;
@@ -145,29 +169,6 @@ export type StepExecutionRecordInput = {
   logs?: ExecutionStepLog[];
   startedAt?: string | null;
   completedAt?: string | null;
-};
-
-export type ConditionDslOperator =
-  | "=="
-  | "!="
-  | ">"
-  | ">="
-  | "<"
-  | "<="
-  | "contains"
-  | "exists";
-
-export type ParsedConditionExpression = {
-  raw: string;
-  subject: string;
-  operator: ConditionDslOperator;
-  value?: string | number | boolean | null;
-};
-
-export type ConditionEvaluationResult = {
-  parsed: ParsedConditionExpression;
-  passed: boolean;
-  resolvedValue: unknown;
 };
 
 export type ExecutorClassification = "success" | "retryable_failure" | "fatal_failure";

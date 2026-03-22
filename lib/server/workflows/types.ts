@@ -1,3 +1,5 @@
+import { normalizeLegacyConditionRecord } from "@/lib/server/conditions/legacy-normalizer";
+
 export const WORKFLOW_LIFECYCLE_STATUSES = [
   "draft_only",
   "published",
@@ -40,6 +42,20 @@ export const WORKFLOW_CONDITION_BRANCH_KEYS = [
   "false",
 ] as const;
 
+export const WORKFLOW_CONDITION_RESOLVER_SCOPES = [
+  "payload",
+  "context",
+] as const;
+
+export const WORKFLOW_CONDITION_OPERATORS = [
+  "equals",
+  "not_equals",
+  "contains",
+  "greater_than",
+  "less_than",
+  "exists",
+] as const;
+
 export const WORKFLOW_RUN_STATUSES = [
   "pending",
   "running",
@@ -66,6 +82,10 @@ export type WorkflowActionType =
   (typeof WORKFLOW_ACTION_TYPES)[number];
 export type WorkflowConditionBranchKey =
   (typeof WORKFLOW_CONDITION_BRANCH_KEYS)[number];
+export type WorkflowConditionResolverScope =
+  (typeof WORKFLOW_CONDITION_RESOLVER_SCOPES)[number];
+export type WorkflowConditionOperator =
+  (typeof WORKFLOW_CONDITION_OPERATORS)[number];
 export type WorkflowRunStatus = (typeof WORKFLOW_RUN_STATUSES)[number];
 export type InternalEventKey = (typeof INTERNAL_EVENT_KEYS)[number];
 export type ValidationSeverity = "error" | "warning";
@@ -75,6 +95,7 @@ export type WorkflowIngestionStatus =
   | "rejected"
   | "duplicate"
   | "rate_limited";
+export type WorkflowConditionValue = string | number | boolean | null;
 
 export type WorkflowMetadata = {
   name: string;
@@ -91,12 +112,20 @@ export type WorkflowTriggerConfig = {
   config: Record<string, unknown>;
 };
 
+export type WorkflowConditionResolver = {
+  scope: WorkflowConditionResolverScope;
+  path: string;
+};
+
 export type WorkflowConditionConfig = {
   id: string;
   label: string;
   description: string;
-  expression: string;
-  config: Record<string, unknown>;
+  resolver: WorkflowConditionResolver;
+  operator: WorkflowConditionOperator;
+  value: WorkflowConditionValue;
+  legacyExpression?: string | null;
+  legacyIssue?: string | null;
 };
 
 export type WorkflowActionConfig = {
@@ -495,6 +524,46 @@ export function isWorkflowConditionBranchKey(
   );
 }
 
+export function isWorkflowConditionResolverScope(
+  value: unknown,
+): value is WorkflowConditionResolverScope {
+  return (
+    typeof value === "string" &&
+    WORKFLOW_CONDITION_RESOLVER_SCOPES.includes(
+      value as WorkflowConditionResolverScope,
+    )
+  );
+}
+
+export function isWorkflowConditionOperator(
+  value: unknown,
+): value is WorkflowConditionOperator {
+  return (
+    typeof value === "string" &&
+    WORKFLOW_CONDITION_OPERATORS.includes(value as WorkflowConditionOperator)
+  );
+}
+
+export function getWorkflowConditionOperatorLabel(
+  operator: WorkflowConditionOperator,
+): string {
+  switch (operator) {
+    case "equals":
+      return "Equals";
+    case "not_equals":
+      return "Not equals";
+    case "contains":
+      return "Contains";
+    case "greater_than":
+      return "Greater than";
+    case "less_than":
+      return "Less than";
+    case "exists":
+    default:
+      return "Exists";
+  }
+}
+
 export function getWorkflowActionTypeLabel(type: WorkflowActionType): string {
   switch (type) {
     case "notify":
@@ -545,6 +614,22 @@ export function createWorkflowActionDefinition(
     label: getWorkflowActionTypeLabel(type),
     description: "",
     config: createDefaultWorkflowActionConfig(type),
+  };
+}
+
+export function createWorkflowConditionDefinition(): WorkflowConditionConfig {
+  return {
+    id: createWorkflowEntityId("condition"),
+    label: "New condition",
+    description: "",
+    resolver: {
+      scope: "payload",
+      path: "",
+    },
+    operator: "equals",
+    value: "",
+    legacyExpression: null,
+    legacyIssue: null,
   };
 }
 
@@ -604,8 +689,11 @@ function getWorkflowCanvasNodeDescriptors(
       label: condition.label,
       description: condition.description,
       config: {
-        expression: condition.expression,
-        ...condition.config,
+        resolverScope: condition.resolver.scope,
+        resolverPath: condition.resolver.path,
+        operator: condition.operator,
+        value: condition.value,
+        legacyIssue: condition.legacyIssue ?? null,
       },
     });
   }
@@ -696,7 +784,6 @@ export function buildWorkflowCanvas(
     } satisfies WorkflowCanvasNode;
   });
 
-  const sourceEdgeCounts = new Map<string, number>();
   const edges: WorkflowCanvasEdge[] = [];
   for (let index = 0; index < nodes.length - 1; index += 1) {
     const sourceNode = nodes[index];
@@ -705,20 +792,11 @@ export function buildWorkflowCanvas(
       continue;
     }
 
-    const currentCount = sourceEdgeCounts.get(sourceNode.id) ?? 0;
-    sourceEdgeCounts.set(sourceNode.id, currentCount + 1);
-    const branchKey =
-      sourceNode.type === "condition"
-        ? currentCount === 0
-          ? "true"
-          : "false"
-        : null;
-
     edges.push({
-      id: createWorkflowEdgeId(sourceNode.id, targetNode.id, branchKey),
+      id: createWorkflowEdgeId(sourceNode.id, targetNode.id, null),
       source: sourceNode.id,
       target: targetNode.id,
-      branchKey,
+      branchKey: null,
     });
   }
 
@@ -755,16 +833,28 @@ export function syncWorkflowDraftCanvas(
   });
 
   const validNodeIds = new Set(nodes.map((node) => node.id));
+  const nodeTypeById = new Map(nodes.map((node) => [node.id, node.type]));
   const seenEdges = new Set<string>();
+  const conditionPassTargets = new Map<string, string>();
   const edges = document.canvas.edges
-    .map((edge) => ({
-      id:
-        edge.id?.trim() ||
-        createWorkflowEdgeId(edge.source, edge.target, edge.branchKey ?? null),
-      source: edge.source,
-      target: edge.target,
-      branchKey: edge.branchKey ?? null,
-    }))
+    .map((edge) => {
+      const source = edge.source;
+      const target = edge.target;
+      const sourceType = nodeTypeById.get(source);
+      const normalizedBranchKey =
+        sourceType === "condition" && edge.branchKey === "true" ? null : null;
+
+      return {
+        id:
+          edge.id?.trim() ||
+          createWorkflowEdgeId(source, target, normalizedBranchKey),
+        source,
+        target,
+        branchKey: normalizedBranchKey,
+        sourceType,
+        originalBranchKey: edge.branchKey ?? null,
+      };
+    })
     .filter((edge) => {
       if (
         !validNodeIds.has(edge.source) ||
@@ -774,6 +864,21 @@ export function syncWorkflowDraftCanvas(
         return false;
       }
 
+      if (
+        edge.sourceType === "condition" &&
+        edge.originalBranchKey === "false"
+      ) {
+        return false;
+      }
+
+      if (edge.sourceType === "condition") {
+        if (conditionPassTargets.has(edge.source)) {
+          return false;
+        }
+
+        conditionPassTargets.set(edge.source, edge.target);
+      }
+
       const key = `${edge.source}:${edge.branchKey ?? "default"}->${edge.target}`;
       if (seenEdges.has(key)) {
         return false;
@@ -781,6 +886,12 @@ export function syncWorkflowDraftCanvas(
 
       seenEdges.add(key);
       return true;
+    })
+    .map((edge) => {
+      const { sourceType, originalBranchKey, ...normalizedEdge } = edge;
+      void sourceType;
+      void originalBranchKey;
+      return normalizedEdge;
     });
 
   return {
@@ -831,15 +942,12 @@ export function normalizeWorkflowDraftDocument(
       conditions: Array.isArray(config.conditions)
         ? config.conditions.map((candidate) => {
             const condition = toRecord(candidate);
-            return {
+            return normalizeLegacyConditionRecord({
+              ...condition,
               id:
                 toStringValue(condition.id) ||
                 createWorkflowEntityId("condition"),
-              label: toStringValue(condition.label),
-              description: toStringValue(condition.description),
-              expression: toStringValue(condition.expression),
-              config: toRecord(condition.config),
-            } satisfies WorkflowConditionConfig;
+            });
           })
         : [],
       actions: Array.isArray(config.actions)

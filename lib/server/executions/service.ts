@@ -1,5 +1,4 @@
 import { writeAuditLog } from "@/lib/server/audit-log";
-import { evaluateConditionExpression } from "@/lib/server/executions/condition-dsl";
 import { executeWorkflowActionNode } from "@/lib/server/executions/executors";
 import {
   cancelWorkflowRunImmediately,
@@ -27,11 +26,17 @@ import {
 import type {
   ExecutionQueueJob,
   RunCancellationResult,
+  WorkflowConditionStepLogData,
+  WorkflowConditionStepOutput,
   WorkflowRunDetail,
   WorkflowRunRow,
   WorkflowRunSummary,
 } from "@/lib/server/executions/types";
 import { createChildLogger, writeLog } from "@/lib/observability/logger";
+import {
+  ConditionEvaluationError,
+  evaluateWorkflowCondition,
+} from "@/lib/server/conditions/evaluator";
 import {
   listWorkflowRowsByIds,
   listWorkflowVersionRowsByIds,
@@ -47,7 +52,6 @@ import {
   type WorkflowActionConfig,
   type WorkflowCanvasNode,
   type WorkflowCanvasEdge,
-  type WorkflowConditionBranchKey,
   type WorkflowConditionConfig,
   type WorkflowDraftDocument,
   type WorkflowRunStatus,
@@ -190,8 +194,11 @@ function buildNodeSnapshot(params: {
     config: params.node.config,
     condition: params.condition
       ? {
-          expression: params.condition.expression,
-          config: params.condition.config,
+          resolver: params.condition.resolver,
+          operator: params.condition.operator,
+          value: params.condition.value,
+          legacyExpression: params.condition.legacyExpression ?? null,
+          legacyIssue: params.condition.legacyIssue ?? null,
         }
       : undefined,
     action: params.action
@@ -277,6 +284,7 @@ async function executeRunAttempt(params: {
   draft: WorkflowDraftDocument;
 }): Promise<
   | { kind: "success" }
+  | { kind: "condition_not_met" }
   | { kind: "cancelled"; failureMessage: string }
   | { kind: "retryable_failure" | "fatal_failure"; failureCode: string; failureMessage: string }
 > {
@@ -383,20 +391,33 @@ async function executeRunAttempt(params: {
         nodeSnapshot: buildNodeSnapshot({ node: activeNode, condition }),
       });
       sequenceNumber += 1;
-
-      let branchTaken: WorkflowConditionBranchKey;
-      let resolvedValue: unknown;
-      try {
-        const evaluation = evaluateConditionExpression({
-          expression: condition.expression,
-          payload: toRecord(params.run.payload),
-          context: mapSourceContext(params.run.source_context),
+      const outgoing = edgesBySource.get(activeNode.id) ?? [];
+      if (outgoing.length !== 1) {
+        await finishStep({
+          stepId: step.id,
+          status: "failed",
+          errorCode: "invalid_condition_path",
+          errorMessage: "Condition nodes must have exactly one pass edge.",
         });
-        branchTaken = evaluation.passed ? "true" : "false";
-        resolvedValue = evaluation.resolvedValue;
+        return {
+          kind: "fatal_failure",
+          failureCode: "invalid_condition_path",
+          failureMessage: "Condition nodes must have exactly one pass edge.",
+        };
+      }
+
+      const payload = toRecord(params.run.payload);
+      const sourceContext = mapSourceContext(params.run.source_context);
+      let evaluation: ReturnType<typeof evaluateWorkflowCondition>;
+      try {
+        evaluation = evaluateWorkflowCondition({
+          condition,
+          payload,
+          context: sourceContext,
+        });
       } catch (error: unknown) {
         const message =
-          error instanceof Error
+          error instanceof ConditionEvaluationError || error instanceof Error
             ? error.message
             : "Condition evaluation failed unexpectedly.";
         await finishStep({
@@ -412,32 +433,47 @@ async function executeRunAttempt(params: {
         };
       }
 
-      const nextEdge = (edgesBySource.get(activeNode.id) ?? []).find(
-        (edge) => edge.branchKey === branchTaken,
-      );
-      if (!nextEdge) {
-        await finishStep({
-          stepId: step.id,
-          status: "failed",
-          errorCode: "missing_condition_branch",
-          errorMessage: `Condition branch ${branchTaken} is not connected.`,
-        });
-        return {
-          kind: "fatal_failure",
-          failureCode: "missing_condition_branch",
-          failureMessage: `Condition branch ${branchTaken} is not connected.`,
-        };
-      }
+      const nextEdge = outgoing[0]!;
+      const conditionOutput: WorkflowConditionStepOutput = {
+        matched: evaluation.matched,
+        resolverScope: evaluation.resolverScope,
+        resolverPath: evaluation.resolverPath,
+        operator: evaluation.operator,
+        expectedValue: evaluation.expectedValue,
+        resolvedValue: evaluation.resolvedValue,
+        terminationReason: evaluation.matched ? null : "condition_not_met",
+        nextNodeId: evaluation.matched ? nextEdge.target : null,
+      };
+      const conditionLogData: WorkflowConditionStepLogData = {
+        matched: conditionOutput.matched,
+        resolverScope: conditionOutput.resolverScope,
+        resolverPath: conditionOutput.resolverPath,
+        operator: conditionOutput.operator,
+        expectedValue: conditionOutput.expectedValue,
+        resolvedValue: conditionOutput.resolvedValue,
+        terminationReason: conditionOutput.terminationReason,
+      };
 
       await finishStep({
         stepId: step.id,
         status: "success",
-        output: {
-          branchTaken,
-          resolvedValue,
-          nextNodeId: nextEdge.target,
-        },
+        output: conditionOutput,
+        logs: [
+          {
+            at: new Date().toISOString(),
+            level: "info",
+            message: evaluation.matched
+              ? "Condition matched and execution continued."
+              : "Condition did not match. Downstream actions were skipped.",
+            data: conditionLogData,
+          },
+        ],
       });
+
+      if (!evaluation.matched) {
+        return { kind: "condition_not_met" };
+      }
+
       currentNode = nodeMap.get(nextEdge.target) ?? null;
       continue;
     }
@@ -723,6 +759,17 @@ export async function processExecutionQueueJob(job: ExecutionQueueJob): Promise<
     if (result.kind === "success") {
       await markWorkflowRunSuccess(claimedRun.id);
       writeLog(logger, "info", "Workflow run completed successfully", {});
+      return;
+    }
+
+    if (result.kind === "condition_not_met") {
+      await markWorkflowRunSuccess(claimedRun.id);
+      writeLog(
+        logger,
+        "info",
+        "Workflow run completed without executing actions because a condition was not met",
+        {},
+      );
       return;
     }
 

@@ -12,6 +12,8 @@ import {
   WORKFLOW_SUPPORTED_TRIGGER_TYPES,
   WORKFLOW_ACTION_TYPES,
   WORKFLOW_CONDITION_BRANCH_KEYS,
+  WORKFLOW_CONDITION_OPERATORS,
+  WORKFLOW_CONDITION_RESOLVER_SCOPES,
   INTERNAL_EVENT_KEYS,
 } from "@/lib/server/workflows/types";
 
@@ -89,6 +91,12 @@ export const workflowActionTypeSchema = z.enum(WORKFLOW_ACTION_TYPES);
 export const workflowConditionBranchKeySchema = z.enum(
   WORKFLOW_CONDITION_BRANCH_KEYS,
 );
+export const workflowConditionResolverScopeSchema = z.enum(
+  WORKFLOW_CONDITION_RESOLVER_SCOPES,
+);
+export const workflowConditionOperatorSchema = z.enum(
+  WORKFLOW_CONDITION_OPERATORS,
+);
 export const workflowRunStatusSchema = z.enum(WORKFLOW_RUN_STATUSES);
 
 const workflowConfigRecordSchema = z.record(z.string(), z.unknown());
@@ -130,10 +138,31 @@ export const workflowTriggerConfigSchema = z.object({
 
 export const workflowConditionConfigSchema = z.object({
   id: z.string().trim().min(1).max(120),
-  label: z.string().trim().min(1).max(120),
+  label: z.string().trim().max(120).default(""),
   description: z.string().trim().max(400).default(""),
-  expression: z.string().trim().min(1).max(400),
-  config: workflowConfigRecordSchema.default({}),
+  resolver: z.object({
+    scope: workflowConditionResolverScopeSchema.default("payload"),
+    path: z.string().trim().max(240).default(""),
+  }),
+  operator: workflowConditionOperatorSchema.default("equals"),
+  value: z
+    .union([z.string().max(400), z.number().finite(), z.boolean(), z.null()])
+    .optional()
+    .default(""),
+  legacyExpression: z
+    .string()
+    .trim()
+    .max(400)
+    .nullable()
+    .optional()
+    .transform((value) => value ?? null),
+  legacyIssue: z
+    .string()
+    .trim()
+    .max(500)
+    .nullable()
+    .optional()
+    .transform((value) => value ?? null),
 });
 
 export const workflowActionConfigSchema = z.object({
