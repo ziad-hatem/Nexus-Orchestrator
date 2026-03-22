@@ -26,11 +26,6 @@ const CATEGORY_OPTIONS = [
 
 const TRIGGER_OPTIONS = [
   {
-    value: "schedule",
-    label: "Schedule",
-    description: "Run the workflow on a recurring cron window.",
-  },
-  {
     value: "webhook",
     label: "Webhook",
     description: "Start from an inbound HTTP request.",
@@ -39,6 +34,11 @@ const TRIGGER_OPTIONS = [
     value: "manual",
     label: "Manual",
     description: "Launch explicitly from UI or API.",
+  },
+  {
+    value: "internal_event",
+    label: "Internal event",
+    description: "React to trusted Nexus events such as ticket.created.",
   },
 ] as const;
 
@@ -66,8 +66,10 @@ export function WorkflowCreateForm({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState<string>("Operations");
-  const [triggerType, setTriggerType] = useState<"schedule" | "webhook" | "manual">(
-    "schedule",
+  const [triggerType, setTriggerType] = useState<
+    "webhook" | "manual" | "internal_event"
+  >(
+    "manual",
   );
   const [tagsInput, setTagsInput] = useState("");
 

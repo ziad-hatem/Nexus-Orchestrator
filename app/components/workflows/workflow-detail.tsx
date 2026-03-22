@@ -9,15 +9,21 @@ import {
 } from "lucide-react";
 import { Button } from "@/app/components/ui/button";
 import { WorkflowArchiveDialog } from "@/app/components/workflows/workflow-archive-dialog";
+import { WorkflowManualTriggerDialog } from "@/app/components/workflows/workflow-manual-trigger-dialog";
 import { WorkflowToolbar } from "@/app/components/workflows/workflow-toolbar";
 import { WorkflowValidationPanel } from "@/app/components/workflows/workflow-validation-panel";
-import type { WorkflowDetail as WorkflowDetailModel } from "@/lib/server/workflows/types";
+import type {
+  WorkflowDetail as WorkflowDetailModel,
+  WorkflowTriggerDetails,
+} from "@/lib/server/workflows/types";
 
 type WorkflowDetailProps = {
   orgSlug: string;
   detail: WorkflowDetailModel;
+  triggerDetails: WorkflowTriggerDetails | null;
   canEditWorkflows: boolean;
   canArchiveWorkflows: boolean;
+  canTriggerWorkflows: boolean;
 };
 
 function formatDateTime(value: string | null): string {
@@ -65,14 +71,18 @@ function statusClasses(status: WorkflowDetailModel["status"]): string {
 export function WorkflowDetail({
   orgSlug,
   detail,
+  triggerDetails,
   canEditWorkflows,
   canArchiveWorkflows,
+  canTriggerWorkflows,
 }: WorkflowDetailProps) {
   const draftHref = `/org/${orgSlug}/workflows/${detail.workflowId}/draft`;
   const historyHref = `/org/${orgSlug}/workflows/${detail.workflowId}/history`;
   const currentVersionHref = detail.latestVersionNumber
     ? `/org/${orgSlug}/workflows/${detail.workflowId}/versions/${detail.latestVersionNumber}`
     : null;
+  const triggerHref = `/org/${orgSlug}/workflows/${detail.workflowId}/trigger`;
+  const webhookHref = `/org/${orgSlug}/workflows/${detail.workflowId}/webhook`;
 
   return (
     <div className="space-y-8">
@@ -96,6 +106,14 @@ export function WorkflowDetail({
                   {detail.hasDraft ? "Continue draft" : "Edit draft"}
                 </Link>
               </Button>
+            ) : null}
+            {triggerDetails?.canTriggerManually && canTriggerWorkflows ? (
+              <WorkflowManualTriggerDialog
+                orgSlug={orgSlug}
+                workflowId={detail.workflowId}
+                workflowName={detail.name}
+                disabled={detail.status === "archived"}
+              />
             ) : null}
             {canArchiveWorkflows && detail.status !== "archived" ? (
               <WorkflowArchiveDialog
@@ -276,6 +294,64 @@ export function WorkflowDetail({
               </div>
             </section>
           ) : null}
+
+          {triggerDetails ? (
+            <section className="glass-panel rounded-[1.75rem] p-6 sm:p-8">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="label-caps">Published trigger</p>
+                  <h2 className="mt-2 text-2xl font-bold tracking-[-0.03em] text-[var(--on-surface)]">
+                    Phase three ingestion contract
+                  </h2>
+                </div>
+                <Button asChild variant="outline" className="rounded-xl">
+                  <Link href={triggerHref}>
+                    Open trigger config
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+              </div>
+
+              <div className="mt-6 grid gap-4 sm:grid-cols-3">
+                <div className="rounded-2xl bg-[var(--surface-container-low)] p-4">
+                  <p className="label-caps">Source</p>
+                  <p className="mt-2 text-sm font-semibold text-[var(--on-surface)]">
+                    {triggerDetails.trigger.sourceType ?? "Not published"}
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-[var(--surface-container-low)] p-4">
+                  <p className="label-caps">Binding</p>
+                  <p className="mt-2 text-sm font-semibold text-[var(--on-surface)]">
+                    {triggerDetails.trigger.hasPublishedBinding
+                      ? "Active"
+                      : "Publish required"}
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-[var(--surface-container-low)] p-4">
+                  <p className="label-caps">Recent attempts</p>
+                  <p className="mt-2 text-sm font-semibold text-[var(--on-surface)]">
+                    {triggerDetails.recentAttempts.length}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-6 rounded-[1.5rem] bg-[var(--surface-container-low)] p-5">
+                <p className="label-caps">Trigger summary</p>
+                <p className="mt-3 text-sm leading-6 text-[var(--on-surface-variant)]">
+                  {triggerDetails.trigger.description ||
+                    "No published trigger description is available yet."}
+                </p>
+                {triggerDetails.trigger.webhook?.endpointPath ? (
+                  <p className="mt-3 text-sm text-[var(--on-surface-variant)]">
+                    Endpoint path:{" "}
+                    <span className="font-mono text-[var(--on-surface)]">
+                      {triggerDetails.trigger.webhook.endpointPath}
+                    </span>
+                  </p>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
         </div>
 
         <aside className="space-y-6">
@@ -322,6 +398,28 @@ export function WorkflowDetail({
                   Open version history
                 </Link>
               </Button>
+              <Button asChild variant="outline" className="justify-start rounded-xl">
+                <Link href={triggerHref}>
+                  <Activity className="h-4 w-4" />
+                  Open trigger config
+                </Link>
+              </Button>
+              {triggerDetails?.trigger.sourceType === "webhook" ? (
+                <Button asChild variant="outline" className="justify-start rounded-xl">
+                  <Link href={webhookHref}>
+                    <Archive className="h-4 w-4" />
+                    Webhook details
+                  </Link>
+                </Button>
+              ) : null}
+              {triggerDetails?.canTriggerManually && canTriggerWorkflows ? (
+                <WorkflowManualTriggerDialog
+                  orgSlug={orgSlug}
+                  workflowId={detail.workflowId}
+                  workflowName={detail.name}
+                  disabled={detail.status === "archived"}
+                />
+              ) : null}
               {currentVersionHref ? (
                 <Button asChild variant="outline" className="justify-start rounded-xl">
                   <Link href={currentVersionHref}>

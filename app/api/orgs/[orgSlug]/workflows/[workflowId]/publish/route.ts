@@ -4,6 +4,7 @@ import { createRequestLogger } from "@/lib/observability/logger";
 import { handleRouteError } from "@/lib/observability/route-handler";
 import { getApiOrgAccess } from "@/lib/server/org-access";
 import { canPublishWorkflows } from "@/lib/server/permissions";
+import { WorkflowTriggerConflictError } from "@/lib/server/triggers/service";
 import { publishWorkflowSchema } from "@/lib/server/validation";
 import {
   publishWorkflow,
@@ -69,7 +70,9 @@ export async function POST(req: Request, { params }: RouteContext) {
     const status =
       error instanceof WorkflowNotFoundError
         ? 404
-        : error instanceof WorkflowValidationError || error instanceof WorkflowConflictError
+        : error instanceof WorkflowValidationError ||
+            error instanceof WorkflowConflictError ||
+            error instanceof WorkflowTriggerConflictError
           ? 409
           : 500;
     const responseBody =

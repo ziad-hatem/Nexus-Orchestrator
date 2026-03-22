@@ -1,6 +1,10 @@
 import type { ReactNode } from "react";
 import { auth } from "@/auth";
-import { canManageMembers, canViewAuditLogs } from "@/lib/server/permissions";
+import {
+  canManageMembers,
+  canViewAuditLogs,
+  canViewStreams,
+} from "@/lib/server/permissions";
 import { requirePageOrgAccess } from "@/lib/server/org-access";
 import { listUserOrganizations } from "@/lib/server/org-service";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
@@ -46,6 +50,7 @@ export default async function OrganizationLayout({
       memberships={memberships}
       canManageMembers={canManageMembers(context.membership.role)}
       canViewAuditLogs={canViewAuditLogs(context.membership.role)}
+      canViewStreams={canViewStreams(context.membership.role)}
       user={{
         name: workspaceUser?.name ?? session?.user?.name ?? null,
         email: workspaceUser?.email ?? session?.user?.email ?? null,

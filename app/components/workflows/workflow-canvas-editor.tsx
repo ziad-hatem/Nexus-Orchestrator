@@ -14,6 +14,7 @@ import { WorkflowPublishDialog } from "@/app/components/workflows/workflow-publi
 import { WorkflowToolbar } from "@/app/components/workflows/workflow-toolbar";
 import { WorkflowValidationPanel } from "@/app/components/workflows/workflow-validation-panel";
 import {
+  createWorkflowActionDefinition,
   createWorkflowEntityId,
   syncWorkflowDraftCanvas,
   type WorkflowActionConfig,
@@ -332,35 +333,33 @@ export function WorkflowCanvasEditor({
   const handleAddAction = (
     position?: WorkflowCanvas["nodes"][number]["position"],
   ): string => {
-    const newActionId = createWorkflowEntityId("action");
+    const action = createWorkflowActionDefinition("notify");
+    const newActionId = action.id;
     updateDraft((current) => ({
       ...current,
       config: {
         ...current.config,
         actions: [
           ...current.config.actions,
-          {
-            id: newActionId,
-            label: "New action",
-            description: "",
-            operation: "",
-            target: "",
-            config: {},
-          },
+          action,
         ],
       },
       canvas: position
         ? appendCanvasNode(current.canvas, {
             id: newActionId,
             type: "action",
-            label: "New action",
-            description: "",
+            label: action.label,
+            description: action.description,
             position,
-            config: {},
+            config: {
+              actionType: action.type,
+              ...action.config,
+            },
           })
         : current.canvas,
     }));
     setSelectedNodeId(newActionId);
+    setInspectorOpen(true);
     return newActionId;
   };
 
@@ -718,6 +717,7 @@ export function WorkflowCanvasEditor({
             <WorkflowNodeInspector
               draft={draft}
               selectedNodeId={selectedNodeId}
+              validationIssues={validationIssues}
               disabled={loading}
               onChangeTrigger={handleChangeTrigger}
               onChangeCondition={handleChangeCondition}

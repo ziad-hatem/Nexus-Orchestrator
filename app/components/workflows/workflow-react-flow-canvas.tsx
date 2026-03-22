@@ -29,11 +29,17 @@ import { Crosshair, GitBranch, Link2, RadioTower, Workflow } from "lucide-react"
 import { Button } from "@/app/components/ui/button";
 import { cn } from "@/app/components/ui/utils";
 import type {
+  WorkflowActionType,
   WorkflowCanvas,
   WorkflowCanvasNode,
+  WorkflowConditionBranchKey,
   WorkflowNodeType,
 } from "@/lib/server/workflows/types";
-import { createWorkflowEdgeId } from "@/lib/server/workflows/types";
+import {
+  createWorkflowEdgeId,
+  getWorkflowActionTypeLabel,
+  isWorkflowConditionBranchKey,
+} from "@/lib/server/workflows/types";
 
 type WorkflowReactFlowCanvasProps = {
   canvas: WorkflowCanvas;
@@ -51,10 +57,13 @@ type FlowNodeData = {
   label: string;
   description: string;
   nodeType: WorkflowNodeType;
+  actionType: WorkflowActionType | null;
 };
 
 type WorkflowFlowNode = Node<FlowNodeData, "workflowNode">;
-type WorkflowFlowEdge = Edge<Record<string, never>>;
+type WorkflowFlowEdge = Edge<{
+  branchKey: WorkflowConditionBranchKey | null;
+}>;
 
 const NODE_WIDTH = 288;
 const NODE_HEIGHT = 160;
@@ -113,10 +122,12 @@ function snapPosition(position: WorkflowCanvasNode["position"]) {
   };
 }
 
-function canConnectNodes(
-  sourceNode: WorkflowCanvasNode | undefined,
-  targetNode: WorkflowCanvasNode | undefined,
-) {
+function canConnectNodes(params: {
+  sourceNode: WorkflowCanvasNode | undefined;
+  targetNode: WorkflowCanvasNode | undefined;
+  sourceHandle?: string | null;
+}) {
+  const { sourceNode, targetNode, sourceHandle } = params;
   if (!sourceNode || !targetNode) {
     return false;
   }
@@ -130,6 +141,14 @@ function canConnectNodes(
   }
 
   if (targetNode.type === "trigger") {
+    return false;
+  }
+
+  if (sourceNode.type === "condition" && !isWorkflowConditionBranchKey(sourceHandle)) {
+    return false;
+  }
+
+  if (sourceNode.type !== "condition" && sourceHandle && sourceHandle !== "default") {
     return false;
   }
 
@@ -154,7 +173,7 @@ function normalizeCanvas(canvas: WorkflowCanvas): WorkflowCanvas {
         return false;
       }
 
-      const key = `${edge.source}->${edge.target}`;
+      const key = `${edge.source}:${edge.branchKey ?? "default"}->${edge.target}`;
       if (seenEdges.has(key)) {
         return false;
       }
@@ -181,6 +200,10 @@ function createFlowNode(
       label: node.label,
       description: node.description,
       nodeType: node.type,
+      actionType:
+        node.type === "action" && typeof node.config.actionType === "string"
+          ? (node.config.actionType as WorkflowActionType)
+          : null,
     },
     selected: isSelected,
     draggable: true,
@@ -206,7 +229,28 @@ function createFlowEdge(
     id: edge.id,
     source: edge.source,
     target: edge.target,
+    sourceHandle: edge.branchKey ?? "default",
     animated: false,
+    label: edge.branchKey ? edge.branchKey.toUpperCase() : undefined,
+    labelStyle: edge.branchKey
+      ? {
+          fill: "var(--on-surface)",
+          fontSize: 11,
+          fontWeight: 700,
+        }
+      : undefined,
+    labelBgPadding: edge.branchKey ? [8, 4] : undefined,
+    labelBgBorderRadius: edge.branchKey ? 999 : undefined,
+    labelBgStyle: edge.branchKey
+      ? {
+          fill: "color-mix(in srgb, var(--surface-container-lowest) 92%, transparent)",
+          stroke: tone.stroke,
+          strokeWidth: 1,
+        }
+      : undefined,
+    data: {
+      branchKey: edge.branchKey,
+    },
     markerEnd: {
       type: MarkerType.ArrowClosed,
       color: tone.stroke,
@@ -242,6 +286,7 @@ function exportCanvas(
       id: edge.id,
       source: edge.source,
       target: edge.target,
+      branchKey: edge.data?.branchKey ?? null,
     })),
   });
 }
@@ -253,6 +298,11 @@ function WorkflowCanvasNodeCard({
   const Icon = FLOW_NODE_ICONS[data.nodeType];
   const canAcceptConnection = data.nodeType !== "trigger";
   const canStartConnection = data.nodeType !== "action";
+  const showConditionBranches = data.nodeType === "condition";
+  const actionTypeLabel =
+    data.nodeType === "action" && data.actionType
+      ? getWorkflowActionTypeLabel(data.actionType)
+      : null;
 
   return (
     <div
@@ -286,6 +336,11 @@ function WorkflowCanvasNodeCard({
             <span className="rounded-full bg-[var(--surface-container-high)] px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--on-surface-variant)]">
               {data.nodeType}
             </span>
+            {actionTypeLabel ? (
+              <span className="rounded-full bg-emerald-500/12 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-800 dark:text-emerald-200">
+                {actionTypeLabel}
+              </span>
+            ) : null}
           </div>
           <p className="mt-3 truncate text-sm font-semibold text-[var(--on-surface)]">
             {data.label || "Untitled node"}
@@ -296,8 +351,36 @@ function WorkflowCanvasNodeCard({
         </div>
       </div>
 
-      {canStartConnection ? (
+      {showConditionBranches ? (
+        <>
+          <div className="pointer-events-none absolute right-9 top-[34%] rounded-full bg-emerald-500/12 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-800 dark:text-emerald-200">
+            True
+          </div>
+          <div className="pointer-events-none absolute right-9 top-[66%] rounded-full bg-rose-500/12 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-rose-800 dark:text-rose-200">
+            False
+          </div>
+          <Handle
+            id="true"
+            type="source"
+            position={Position.Right}
+            style={{ top: "36%" }}
+            className="workflow-node-handle workflow-node-handle--output"
+            isConnectableEnd={false}
+            aria-label={`Start true branch from ${data.label || data.nodeType}`}
+          />
+          <Handle
+            id="false"
+            type="source"
+            position={Position.Right}
+            style={{ top: "68%" }}
+            className="workflow-node-handle workflow-node-handle--output"
+            isConnectableEnd={false}
+            aria-label={`Start false branch from ${data.label || data.nodeType}`}
+          />
+        </>
+      ) : canStartConnection ? (
         <Handle
+          id="default"
           type="source"
           position={Position.Right}
           className="workflow-node-handle workflow-node-handle--output"
@@ -358,18 +441,64 @@ export function WorkflowReactFlowCanvas({
 
     const sourceNode = nodeMap.get(connection.source);
     const targetNode = nodeMap.get(connection.target);
-    if (!canConnectNodes(sourceNode, targetNode)) {
+    if (
+      !canConnectNodes({
+        sourceNode,
+        targetNode,
+        sourceHandle: connection.sourceHandle,
+      })
+    ) {
       return;
     }
 
     const tone = getEdgeTone(sourceNode?.type ?? "action");
-    const edgeId = createWorkflowEdgeId(connection.source, connection.target);
+    const branchKey =
+      sourceNode?.type === "condition" &&
+      isWorkflowConditionBranchKey(connection.sourceHandle)
+        ? connection.sourceHandle
+        : null;
+    const edgeId = createWorkflowEdgeId(
+      connection.source,
+      connection.target,
+      branchKey,
+    );
+    const baseEdges =
+      sourceNode?.type === "condition" && branchKey
+        ? flowEdges.filter(
+            (edge) =>
+              !(
+                edge.source === connection.source &&
+                edge.data?.branchKey === branchKey
+              ),
+          )
+        : flowEdges;
 
     const nextEdges = addEdge(
       {
         ...connection,
         id: edgeId,
+        sourceHandle: branchKey ?? "default",
         animated: false,
+        label: branchKey ? branchKey.toUpperCase() : undefined,
+        labelStyle: branchKey
+          ? {
+              fill: "var(--on-surface)",
+              fontSize: 11,
+              fontWeight: 700,
+            }
+          : undefined,
+        labelBgPadding: branchKey ? [8, 4] : undefined,
+        labelBgBorderRadius: branchKey ? 999 : undefined,
+        labelBgStyle: branchKey
+          ? {
+              fill: "color-mix(in srgb, var(--surface-container-lowest) 92%, transparent)",
+              stroke: tone.stroke,
+              strokeWidth: 1,
+            }
+          : undefined,
+        data: {
+          branchKey,
+        },
         markerEnd: {
           type: MarkerType.ArrowClosed,
           color: tone.stroke,
@@ -382,7 +511,7 @@ export function WorkflowReactFlowCanvas({
           filter: tone.glow,
         },
       },
-      flowEdges,
+      baseEdges,
     );
 
     onCanvasChange(exportCanvas(flowNodes, nextEdges, canvas));
@@ -498,10 +627,15 @@ export function WorkflowReactFlowCanvas({
           }}
           onPaneClick={() => onSelectNode(null)}
           isValidConnection={(connection) =>
-            canConnectNodes(
-              connection.source ? nodeMap.get(connection.source) : undefined,
-              connection.target ? nodeMap.get(connection.target) : undefined,
-            )
+            canConnectNodes({
+              sourceNode: connection.source
+                ? nodeMap.get(connection.source)
+                : undefined,
+              targetNode: connection.target
+                ? nodeMap.get(connection.target)
+                : undefined,
+              sourceHandle: connection.sourceHandle,
+            })
           }
           connectionLineType={ConnectionLineType.Bezier}
           connectionLineStyle={{

@@ -15,13 +15,57 @@ export const WORKFLOW_TRIGGER_TYPES = [
   "schedule",
   "webhook",
   "manual",
+  "internal_event",
+] as const;
+
+export const WORKFLOW_SUPPORTED_TRIGGER_TYPES = [
+  "manual",
+  "webhook",
+  "internal_event",
+] as const;
+
+export const WORKFLOW_SUPPORTED_ACTION_TYPES = [
+  "notify",
+  "webhook_request",
+  "ticket_update",
+] as const;
+
+export const WORKFLOW_ACTION_TYPES = [
+  ...WORKFLOW_SUPPORTED_ACTION_TYPES,
+  "legacy_custom",
+] as const;
+
+export const WORKFLOW_CONDITION_BRANCH_KEYS = [
+  "true",
+  "false",
+] as const;
+
+export const INTERNAL_EVENT_KEYS = [
+  "ticket.created",
+  "payment.failed",
 ] as const;
 
 export type WorkflowLifecycleStatus =
   (typeof WORKFLOW_LIFECYCLE_STATUSES)[number];
 export type WorkflowNodeType = (typeof WORKFLOW_NODE_TYPES)[number];
 export type WorkflowTriggerType = (typeof WORKFLOW_TRIGGER_TYPES)[number];
+export type SupportedWorkflowTriggerType =
+  (typeof WORKFLOW_SUPPORTED_TRIGGER_TYPES)[number];
+export type SupportedWorkflowActionType =
+  (typeof WORKFLOW_SUPPORTED_ACTION_TYPES)[number];
+export type WorkflowActionType =
+  (typeof WORKFLOW_ACTION_TYPES)[number];
+export type WorkflowConditionBranchKey =
+  (typeof WORKFLOW_CONDITION_BRANCH_KEYS)[number];
+export type InternalEventKey = (typeof INTERNAL_EVENT_KEYS)[number];
 export type ValidationSeverity = "error" | "warning";
+export type WorkflowTriggerSource = SupportedWorkflowTriggerType;
+export type WorkflowIngestionStatus =
+  | "accepted"
+  | "rejected"
+  | "duplicate"
+  | "rate_limited";
+export type WorkflowRunStatus = "pending";
 
 export type WorkflowMetadata = {
   name: string;
@@ -50,8 +94,7 @@ export type WorkflowActionConfig = {
   id: string;
   label: string;
   description: string;
-  operation: string;
-  target: string;
+  type: WorkflowActionType;
   config: Record<string, unknown>;
 };
 
@@ -71,6 +114,7 @@ export type WorkflowCanvasEdge = {
   id: string;
   source: string;
   target: string;
+  branchKey: WorkflowConditionBranchKey | null;
 };
 
 export type WorkflowCanvas = {
@@ -162,6 +206,86 @@ export type WorkflowVersionSummary = {
   isCurrent: boolean;
 };
 
+export type WorkflowSourceContext = {
+  sourceLabel: string;
+  eventKey?: InternalEventKey | null;
+  requestPath?: string | null;
+  requestMethod?: string | null;
+  requestId?: string | null;
+  requestIp?: string | null;
+  requestUserAgent?: string | null;
+  timestamp?: string | null;
+  actorUserId?: string | null;
+  deliveryId?: string | null;
+  apiKeyVerified?: boolean | null;
+  rawBody?: string | null;
+};
+
+export type WorkflowPendingRunSummary = {
+  runId: string;
+  workflowId: string;
+  workflowName: string;
+  workflowVersionNumber: number;
+  triggerSource: WorkflowTriggerSource;
+  status: WorkflowRunStatus;
+  createdAt: string;
+  idempotencyKey: string | null;
+};
+
+export type WorkflowIngestionEventSummary = {
+  eventId: string;
+  workflowId: string;
+  workflowName: string;
+  workflowVersionNumber: number;
+  sourceType: WorkflowTriggerSource;
+  status: WorkflowIngestionStatus;
+  eventKey: InternalEventKey | null;
+  matchKey: string;
+  idempotencyKey: string | null;
+  errorCode: string | null;
+  errorMessage: string | null;
+  payload: Record<string, unknown>;
+  sourceContext: WorkflowSourceContext;
+  requestIp: string | null;
+  requestUserAgent: string | null;
+  runId: string | null;
+  createdAt: string;
+};
+
+export type WorkflowWebhookSecretState = {
+  hasSecret: boolean;
+  lastFour: string | null;
+  endpointPath: string | null;
+  endpointUrl: string | null;
+  apiKeyRequired: boolean;
+};
+
+export type WorkflowTriggerSummary = {
+  bindingId: string | null;
+  workflowId: string;
+  workflowName: string;
+  workflowStatus: WorkflowLifecycleStatus;
+  workflowVersionNumber: number | null;
+  sourceType: WorkflowTriggerType | null;
+  label: string | null;
+  description: string | null;
+  matchKey: string | null;
+  config: Record<string, unknown>;
+  hasPublishedBinding: boolean;
+  draftTrigger: WorkflowTriggerConfig | null;
+  webhook: WorkflowWebhookSecretState | null;
+};
+
+export type WorkflowTriggerDetails = {
+  workflowId: string;
+  workflowName: string;
+  workflowStatus: WorkflowLifecycleStatus;
+  publishedVersionNumber: number | null;
+  canTriggerManually: boolean;
+  trigger: WorkflowTriggerSummary;
+  recentAttempts: WorkflowIngestionEventSummary[];
+};
+
 type WorkflowCanvasNodeDescriptor = Omit<WorkflowCanvasNode, "position">;
 
 function toRecord(value: unknown): Record<string, unknown> {
@@ -176,6 +300,44 @@ function toStringValue(value: unknown): string {
 
 function toNumberValue(value: unknown, fallback = 0): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function normalizeWorkflowActionRecord(value: unknown): WorkflowActionConfig {
+  const action = toRecord(value);
+  const rawConfig = toRecord(action.config);
+  const legacyOperation =
+    toStringValue(action.operation) || toStringValue(rawConfig.operation);
+  const legacyTarget =
+    toStringValue(action.target) || toStringValue(rawConfig.target);
+  const type = isWorkflowActionType(action.type)
+    ? action.type
+    : legacyOperation || legacyTarget
+      ? "legacy_custom"
+      : "notify";
+
+  const config =
+    type === "legacy_custom"
+      ? {
+          operation: legacyOperation,
+          target: legacyTarget,
+          ...rawConfig,
+        }
+      : {
+          ...createDefaultWorkflowActionConfig(type),
+          ...rawConfig,
+        };
+
+  return {
+    id: toStringValue(action.id) || createWorkflowEntityId("action"),
+    label:
+      toStringValue(action.label) ||
+      (type === "legacy_custom"
+        ? "Legacy action"
+        : getWorkflowActionTypeLabel(type)),
+    description: toStringValue(action.description),
+    type,
+    config,
+  } satisfies WorkflowActionConfig;
 }
 
 export function normalizeWorkflowTags(value: unknown): string[] {
@@ -216,8 +378,96 @@ export function createWorkflowPublicId(): string {
   return `WFL-${raw ?? "0000"}`;
 }
 
-export function createWorkflowEdgeId(source: string, target: string): string {
-  return `edge-${source}-${target}`;
+export function isWorkflowActionType(value: unknown): value is WorkflowActionType {
+  return (
+    typeof value === "string" &&
+    WORKFLOW_ACTION_TYPES.includes(value as WorkflowActionType)
+  );
+}
+
+export function isSupportedWorkflowActionType(
+  value: unknown,
+): value is SupportedWorkflowActionType {
+  return (
+    typeof value === "string" &&
+    WORKFLOW_SUPPORTED_ACTION_TYPES.includes(
+      value as SupportedWorkflowActionType,
+    )
+  );
+}
+
+export function isWorkflowConditionBranchKey(
+  value: unknown,
+): value is WorkflowConditionBranchKey {
+  return (
+    typeof value === "string" &&
+    WORKFLOW_CONDITION_BRANCH_KEYS.includes(
+      value as WorkflowConditionBranchKey,
+    )
+  );
+}
+
+export function getWorkflowActionTypeLabel(type: WorkflowActionType): string {
+  switch (type) {
+    case "notify":
+      return "Notify";
+    case "webhook_request":
+      return "Webhook request";
+    case "ticket_update":
+      return "Ticket update";
+    case "legacy_custom":
+    default:
+      return "Legacy custom";
+  }
+}
+
+export function createDefaultWorkflowActionConfig(
+  type: SupportedWorkflowActionType,
+): Record<string, unknown> {
+  switch (type) {
+    case "notify":
+      return {
+        channel: "email",
+        recipient: "",
+        template: "",
+        message: "",
+      };
+    case "webhook_request":
+      return {
+        url: "",
+        method: "POST",
+        payloadTemplate: "",
+      };
+    case "ticket_update":
+    default:
+      return {
+        field: "status",
+        value: "",
+        note: "",
+      };
+  }
+}
+
+export function createWorkflowActionDefinition(
+  type: SupportedWorkflowActionType = "notify",
+): WorkflowActionConfig {
+  return {
+    id: createWorkflowEntityId("action"),
+    type,
+    label: getWorkflowActionTypeLabel(type),
+    description: "",
+    config: createDefaultWorkflowActionConfig(type),
+  };
+}
+
+export function createWorkflowEdgeId(
+  source: string,
+  target: string,
+  branchKey: WorkflowConditionBranchKey | null = null,
+): string {
+  return branchKey
+    ? `edge-${source}-${branchKey}-${target}`
+    : `edge-${source}-${target}`;
 }
 
 function defaultNodePosition(
@@ -279,8 +529,7 @@ function getWorkflowCanvasNodeDescriptors(
       label: action.label,
       description: action.description,
       config: {
-        operation: action.operation,
-        target: action.target,
+        actionType: action.type,
         ...action.config,
       },
     });
@@ -314,6 +563,8 @@ export function createEmptyWorkflowDraftDocument(params?: {
             ? "Schedule trigger"
             : triggerType === "webhook"
               ? "Webhook trigger"
+              : triggerType === "internal_event"
+                ? "Internal event trigger"
               : "Manual trigger",
         description: "",
         config:
@@ -321,7 +572,9 @@ export function createEmptyWorkflowDraftDocument(params?: {
             ? { cron: "" }
             : triggerType === "webhook"
               ? { method: "POST", path: "" }
-              : {},
+              : triggerType === "internal_event"
+                ? { eventKey: "ticket.created" }
+                : {},
       },
       conditions: [],
       actions: [],
@@ -355,11 +608,31 @@ export function buildWorkflowCanvas(
     } satisfies WorkflowCanvasNode;
   });
 
-  const edges = nodes.slice(1).map((node, index) => ({
-    id: createWorkflowEdgeId(nodes[index].id, node.id),
-    source: nodes[index].id,
-    target: node.id,
-  }));
+  const sourceEdgeCounts = new Map<string, number>();
+  const edges: WorkflowCanvasEdge[] = [];
+  for (let index = 0; index < nodes.length - 1; index += 1) {
+    const sourceNode = nodes[index];
+    const targetNode = nodes[index + 1];
+    if (sourceNode.type === "action") {
+      continue;
+    }
+
+    const currentCount = sourceEdgeCounts.get(sourceNode.id) ?? 0;
+    sourceEdgeCounts.set(sourceNode.id, currentCount + 1);
+    const branchKey =
+      sourceNode.type === "condition"
+        ? currentCount === 0
+          ? "true"
+          : "false"
+        : null;
+
+    edges.push({
+      id: createWorkflowEdgeId(sourceNode.id, targetNode.id, branchKey),
+      source: sourceNode.id,
+      target: targetNode.id,
+      branchKey,
+    });
+  }
 
   return { nodes, edges };
 }
@@ -397,9 +670,12 @@ export function syncWorkflowDraftCanvas(
   const seenEdges = new Set<string>();
   const edges = document.canvas.edges
     .map((edge) => ({
-      id: edge.id?.trim() || createWorkflowEdgeId(edge.source, edge.target),
+      id:
+        edge.id?.trim() ||
+        createWorkflowEdgeId(edge.source, edge.target, edge.branchKey ?? null),
       source: edge.source,
       target: edge.target,
+      branchKey: edge.branchKey ?? null,
     }))
     .filter((edge) => {
       if (
@@ -410,7 +686,7 @@ export function syncWorkflowDraftCanvas(
         return false;
       }
 
-      const key = `${edge.source}->${edge.target}`;
+      const key = `${edge.source}:${edge.branchKey ?? "default"}->${edge.target}`;
       if (seenEdges.has(key)) {
         return false;
       }
@@ -479,17 +755,9 @@ export function normalizeWorkflowDraftDocument(
           })
         : [],
       actions: Array.isArray(config.actions)
-        ? config.actions.map((candidate) => {
-            const action = toRecord(candidate);
-            return {
-              id: toStringValue(action.id) || createWorkflowEntityId("action"),
-              label: toStringValue(action.label),
-              description: toStringValue(action.description),
-              operation: toStringValue(action.operation),
-              target: toStringValue(action.target),
-              config: toRecord(action.config),
-            } satisfies WorkflowActionConfig;
-          })
+        ? config.actions.map((candidate) =>
+            normalizeWorkflowActionRecord(candidate),
+          )
         : [],
     },
     canvas: {
@@ -523,9 +791,15 @@ export function normalizeWorkflowDraftDocument(
                 createWorkflowEdgeId(
                   toStringValue(edge.source),
                   toStringValue(edge.target),
+                  isWorkflowConditionBranchKey(edge.branchKey)
+                    ? edge.branchKey
+                    : null,
                 ),
               source: toStringValue(edge.source),
               target: toStringValue(edge.target),
+              branchKey: isWorkflowConditionBranchKey(edge.branchKey)
+                ? edge.branchKey
+                : null,
             } satisfies WorkflowCanvasEdge;
           })
         : [],
@@ -579,4 +853,22 @@ export function getWorkflowVersionLabel(versionNumber: number | null): string {
   return typeof versionNumber === "number" && versionNumber > 0
     ? `v${versionNumber}`
     : "No published version";
+}
+
+export function isInternalEventKey(value: unknown): value is InternalEventKey {
+  return (
+    typeof value === "string" &&
+    INTERNAL_EVENT_KEYS.includes(value as InternalEventKey)
+  );
+}
+
+export function isSupportedWorkflowTriggerType(
+  value: unknown,
+): value is SupportedWorkflowTriggerType {
+  return (
+    typeof value === "string" &&
+    WORKFLOW_SUPPORTED_TRIGGER_TYPES.includes(
+      value as SupportedWorkflowTriggerType,
+    )
+  );
 }

@@ -1,8 +1,14 @@
 import "server-only";
 
 import { writeAuditLog } from "@/lib/server/audit-log";
+import {
+  deactivateWorkflowTriggerBindings,
+  materializePublishedTriggerBinding,
+} from "@/lib/server/triggers/service";
+import { deleteTriggerBindingRow } from "@/lib/server/triggers/repository";
 import { normalizeOrgSlug } from "@/lib/server/validation";
 import {
+  type SupportedWorkflowTriggerType,
   type ValidationIssue,
   type WorkflowActor,
   type WorkflowDetail,
@@ -327,7 +333,7 @@ export async function createWorkflow(params: {
   description?: string;
   category: string;
   tags?: string[];
-  triggerType?: "schedule" | "webhook" | "manual";
+  triggerType?: SupportedWorkflowTriggerType;
   request?: Request | null;
 }): Promise<WorkflowDraftState> {
   const workflowId = await reserveWorkflowPublicId(params.organizationId);
@@ -679,8 +685,25 @@ export async function publishWorkflow(params: {
     notes: params.notes?.trim() || null,
     userId: params.userId,
   });
+  let createdBindingId: string | null = null;
 
   try {
+    if (!draftDocument.config.trigger) {
+      throw new WorkflowConflictError(
+        "Workflow drafts must include a trigger before publishing.",
+      );
+    }
+
+    const binding = await materializePublishedTriggerBinding({
+      organizationId: params.organizationId,
+      workflow,
+      version,
+      trigger: draftDocument.config.trigger,
+      userId: params.userId,
+      request: params.request,
+    });
+    createdBindingId = binding.binding.id;
+
     await updateWorkflowRow({
       workflowDbId: workflow.id,
       patch: {
@@ -695,6 +718,9 @@ export async function publishWorkflow(params: {
     });
     await deleteWorkflowDraftRowByWorkflowDbId(workflow.id);
   } catch (error) {
+    if (createdBindingId) {
+      await deleteTriggerBindingRow(createdBindingId).catch(() => undefined);
+    }
     await deleteWorkflowVersionRow({
       workflowDbId: workflow.id,
       versionNumber: nextVersionNumber,
@@ -747,6 +773,10 @@ export async function archiveWorkflow(params: {
       archived_by: params.userId,
       updated_by: params.userId,
     },
+  });
+  await deactivateWorkflowTriggerBindings({
+    workflowDbId: workflow.id,
+    userId: params.userId,
   });
 
   await writeAuditLog({

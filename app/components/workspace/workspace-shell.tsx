@@ -17,6 +17,7 @@ type WorkspaceShellProps = {
   memberships: UserOrganizationMembership[];
   canManageMembers: boolean;
   canViewAuditLogs: boolean;
+  canViewStreams: boolean;
   user: {
     name: string | null;
     email: string | null;
@@ -32,6 +33,7 @@ export function WorkspaceShell({
   memberships,
   canManageMembers,
   canViewAuditLogs,
+  canViewStreams,
   user,
 }: WorkspaceShellProps) {
   return (
@@ -74,6 +76,7 @@ export function WorkspaceShell({
             organizationSlug={organizationSlug}
             canManageMembers={canManageMembers}
             canViewAuditLogs={canViewAuditLogs}
+            canViewStreams={canViewStreams}
           />
 
           <div className="glass-pill mt-8 rounded-2xl p-4">

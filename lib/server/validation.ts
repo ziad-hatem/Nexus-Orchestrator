@@ -8,7 +8,10 @@ import {
 import {
   WORKFLOW_LIFECYCLE_STATUSES,
   WORKFLOW_NODE_TYPES,
-  WORKFLOW_TRIGGER_TYPES,
+  WORKFLOW_SUPPORTED_TRIGGER_TYPES,
+  WORKFLOW_ACTION_TYPES,
+  WORKFLOW_CONDITION_BRANCH_KEYS,
+  INTERNAL_EVENT_KEYS,
 } from "@/lib/server/workflows/types";
 
 export const roleSchema = z.enum(ORGANIZATION_ROLES);
@@ -78,8 +81,13 @@ export const auditFilterSchema = z.object({
 export const workflowLifecycleStatusSchema = z.enum(
   WORKFLOW_LIFECYCLE_STATUSES,
 );
-export const workflowTriggerTypeSchema = z.enum(WORKFLOW_TRIGGER_TYPES);
+export const workflowTriggerTypeSchema = z.enum(WORKFLOW_SUPPORTED_TRIGGER_TYPES);
 export const workflowNodeTypeSchema = z.enum(WORKFLOW_NODE_TYPES);
+export const internalEventKeySchema = z.enum(INTERNAL_EVENT_KEYS);
+export const workflowActionTypeSchema = z.enum(WORKFLOW_ACTION_TYPES);
+export const workflowConditionBranchKeySchema = z.enum(
+  WORKFLOW_CONDITION_BRANCH_KEYS,
+);
 
 const workflowConfigRecordSchema = z.record(z.string(), z.unknown());
 
@@ -109,7 +117,10 @@ export const workflowMetadataSchema = z.object({
 
 export const workflowTriggerConfigSchema = z.object({
   id: z.string().trim().min(1).max(120),
-  type: workflowTriggerTypeSchema,
+  type: z.enum([
+    "schedule",
+    ...WORKFLOW_SUPPORTED_TRIGGER_TYPES,
+  ] as const),
   label: z.string().trim().min(1).max(120),
   description: z.string().trim().max(400).default(""),
   config: workflowConfigRecordSchema.default({}),
@@ -127,8 +138,7 @@ export const workflowActionConfigSchema = z.object({
   id: z.string().trim().min(1).max(120),
   label: z.string().trim().min(1).max(120),
   description: z.string().trim().max(400).default(""),
-  operation: z.string().trim().min(1).max(120),
-  target: z.string().trim().min(1).max(240),
+  type: workflowActionTypeSchema,
   config: workflowConfigRecordSchema.default({}),
 });
 
@@ -148,6 +158,10 @@ export const workflowCanvasEdgeSchema = z.object({
   id: z.string().trim().min(1).max(200),
   source: z.string().trim().min(1).max(120),
   target: z.string().trim().min(1).max(120),
+  branchKey: workflowConditionBranchKeySchema
+    .nullable()
+    .optional()
+    .transform((value) => value ?? null),
 });
 
 export const workflowDraftConfigSchema = z.object({
@@ -231,6 +245,59 @@ export const workflowVersionNumberSchema = z.coerce
   .int()
   .min(1, "Workflow version is invalid");
 
+export const manualTriggerRequestSchema = z.object({
+  payload: workflowConfigRecordSchema.optional(),
+  idempotencyKey: z
+    .string()
+    .trim()
+    .max(200, "Idempotency key is too long")
+    .optional()
+    .transform((value) => (value ? value : undefined)),
+});
+
+export const regenerateWebhookSecretSchema = z.object({
+  reason: z
+    .string()
+    .trim()
+    .max(200, "Reason is too long")
+    .optional()
+    .transform((value) => (value ? value : undefined)),
+});
+
+export const streamFilterSchema = z.object({
+  query: z
+    .string()
+    .trim()
+    .max(120)
+    .optional()
+    .transform((value) => (value ? value : undefined)),
+  source: workflowTriggerTypeSchema.optional(),
+  status: z.enum(["accepted", "rejected", "duplicate", "rate_limited"]).optional(),
+  workflowId: workflowIdSchema.optional(),
+  eventKey: internalEventKeySchema.optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(50).default(20),
+});
+
+export const triggerAttemptFilterSchema = z.object({
+  status: z.enum(["accepted", "rejected", "duplicate", "rate_limited"]).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(25).default(10),
+});
+
+export const internalEventIngestionSchema = z.object({
+  eventId: z.string().trim().min(1).max(200),
+  eventKey: internalEventKeySchema,
+  source: z.string().trim().min(1).max(120),
+  payload: workflowConfigRecordSchema.default({}),
+  occurredAt: z
+    .string()
+    .datetime({ offset: true })
+    .optional()
+    .or(z.literal(""))
+    .transform((value) => (typeof value === "string" && value ? value : undefined)),
+});
+
 export const orgSlugSchema = z
   .string()
   .trim()
@@ -274,6 +341,22 @@ export function normalizeOrgSlug(value: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 48) || "workspace";
+}
+
+export function normalizeWebhookPath(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  const normalized = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+  if (!normalized.startsWith("/hooks/")) {
+    return normalized.startsWith("/hooks")
+      ? normalized.replace(/^\/hooks/, "/hooks/")
+      : `/hooks/${normalized.replace(/^\/+/, "")}`;
+  }
+
+  return normalized.replace(/\/{2,}/g, "/");
 }
 
 export function parseRole(value: unknown): OrganizationRole | null {

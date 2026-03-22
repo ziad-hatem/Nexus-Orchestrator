@@ -4,9 +4,11 @@ import { useEffect } from "react";
 import type {
   WorkflowDetail,
   WorkflowDraftState,
+  WorkflowIngestionEventSummary,
   WorkflowLifecycleStatus,
   WorkflowPublishedSnapshot,
   WorkflowSummary,
+  WorkflowTriggerDetails,
   WorkflowVersionSummary,
 } from "@/lib/server/workflows/types";
 import { useWorkspaceStore } from "@/lib/stores/workspace-store";
@@ -26,16 +28,25 @@ type WorkflowStoreHydratorProps = {
   };
   detail?: WorkflowDetail | null;
   draft?: WorkflowDraftState | null;
+  trigger?: WorkflowTriggerDetails | null;
   versions?: WorkflowVersionSummary[];
   version?: WorkflowPublishedSnapshot | null;
+  streams?: {
+    items: WorkflowIngestionEventSummary[];
+    total: number;
+    page: number;
+    pageSize: number;
+  };
 };
 
 export function WorkflowStoreHydrator({
   directory,
   detail,
   draft,
+  trigger,
   versions,
   version,
+  streams,
 }: WorkflowStoreHydratorProps) {
   const setWorkflowDirectory = useWorkspaceStore(
     (state) => state.setWorkflowDirectory,
@@ -46,6 +57,8 @@ export function WorkflowStoreHydrator({
     (state) => state.setWorkflowVersions,
   );
   const setWorkflowVersion = useWorkspaceStore((state) => state.setWorkflowVersion);
+  const setWorkflowTrigger = useWorkspaceStore((state) => state.setWorkflowTrigger);
+  const setWorkflowStreams = useWorkspaceStore((state) => state.setWorkflowStreams);
 
   useEffect(() => {
     if (!directory) {
@@ -72,6 +85,14 @@ export function WorkflowStoreHydrator({
   }, [draft, setWorkflowDraft]);
 
   useEffect(() => {
+    if (trigger === undefined) {
+      return;
+    }
+
+    setWorkflowTrigger(trigger);
+  }, [setWorkflowTrigger, trigger]);
+
+  useEffect(() => {
     if (versions === undefined) {
       return;
     }
@@ -86,6 +107,14 @@ export function WorkflowStoreHydrator({
 
     setWorkflowVersion(version);
   }, [setWorkflowVersion, version]);
+
+  useEffect(() => {
+    if (streams === undefined) {
+      return;
+    }
+
+    setWorkflowStreams(streams);
+  }, [setWorkflowStreams, streams]);
 
   return null;
 }

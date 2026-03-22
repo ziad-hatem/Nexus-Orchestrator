@@ -17,9 +17,11 @@ import type {
 import type {
   WorkflowDetail,
   WorkflowDraftState,
+  WorkflowIngestionEventSummary,
   WorkflowLifecycleStatus,
   WorkflowPublishedSnapshot,
   WorkflowSummary,
+  WorkflowTriggerDetails,
   WorkflowVersionSummary,
 } from "@/lib/server/workflows/types";
 
@@ -80,8 +82,13 @@ type WorkspaceStoreState = {
   workflowCategories: string[];
   activeWorkflowDetail: WorkflowDetail | null;
   activeWorkflowDraft: WorkflowDraftState | null;
+  activeWorkflowTrigger: WorkflowTriggerDetails | null;
   workflowVersions: WorkflowVersionSummary[];
   activeWorkflowVersion: WorkflowPublishedSnapshot | null;
+  workflowStreams: WorkflowIngestionEventSummary[];
+  workflowStreamsTotal: number;
+  workflowStreamsPage: number;
+  workflowStreamsPageSize: number;
   setSessionUser: (sessionUser: SessionUserState | null) => void;
   setMemberships: (memberships: UserOrganizationMembership[]) => void;
   setWorkspace: (payload: {
@@ -124,8 +131,15 @@ type WorkspaceStoreState = {
   }) => void;
   setWorkflowDetail: (detail: WorkflowDetail | null) => void;
   setWorkflowDraft: (draft: WorkflowDraftState | null) => void;
+  setWorkflowTrigger: (trigger: WorkflowTriggerDetails | null) => void;
   setWorkflowVersions: (versions: WorkflowVersionSummary[]) => void;
   setWorkflowVersion: (version: WorkflowPublishedSnapshot | null) => void;
+  setWorkflowStreams: (payload: {
+    items: WorkflowIngestionEventSummary[];
+    total: number;
+    page: number;
+    pageSize: number;
+  }) => void;
   clearWorkspace: () => void;
 };
 
@@ -159,8 +173,13 @@ const orgScopedInitialState = {
   workflowCategories: [] as string[],
   activeWorkflowDetail: null as WorkflowDetail | null,
   activeWorkflowDraft: null as WorkflowDraftState | null,
+  activeWorkflowTrigger: null as WorkflowTriggerDetails | null,
   workflowVersions: [] as WorkflowVersionSummary[],
   activeWorkflowVersion: null as WorkflowPublishedSnapshot | null,
+  workflowStreams: [] as WorkflowIngestionEventSummary[],
+  workflowStreamsTotal: 0,
+  workflowStreamsPage: 1,
+  workflowStreamsPageSize: 20,
 };
 
 const initialState = {
@@ -311,6 +330,12 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set) => ({
       hydrated: true,
       activeWorkflowDraft: draft,
     })),
+  setWorkflowTrigger: (trigger) =>
+    set((state) => ({
+      ...state,
+      hydrated: true,
+      activeWorkflowTrigger: trigger,
+    })),
   setWorkflowVersions: (versions) =>
     set((state) => ({
       ...state,
@@ -322,6 +347,15 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set) => ({
       ...state,
       hydrated: true,
       activeWorkflowVersion: version,
+    })),
+  setWorkflowStreams: (payload) =>
+    set((state) => ({
+      ...state,
+      hydrated: true,
+      workflowStreams: payload.items,
+      workflowStreamsTotal: payload.total,
+      workflowStreamsPage: payload.page,
+      workflowStreamsPageSize: payload.pageSize,
     })),
   clearWorkspace: () => ({
     ...initialState,

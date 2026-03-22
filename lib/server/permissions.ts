@@ -15,6 +15,8 @@ export type PermissionSet = {
   canEditWorkflows: boolean;
   canPublishWorkflows: boolean;
   canArchiveWorkflows: boolean;
+  canTriggerWorkflows: boolean;
+  canViewStreams: boolean;
   canManageMembers: boolean;
   canCreateInvites: boolean;
   canViewAuditLogs: boolean;
@@ -29,6 +31,8 @@ const PERMISSIONS_BY_ROLE: Record<OrganizationRole, PermissionSet> = {
     canEditWorkflows: true,
     canPublishWorkflows: true,
     canArchiveWorkflows: true,
+    canTriggerWorkflows: true,
+    canViewStreams: true,
     canManageMembers: true,
     canCreateInvites: true,
     canViewAuditLogs: true,
@@ -41,6 +45,8 @@ const PERMISSIONS_BY_ROLE: Record<OrganizationRole, PermissionSet> = {
     canEditWorkflows: true,
     canPublishWorkflows: true,
     canArchiveWorkflows: true,
+    canTriggerWorkflows: true,
+    canViewStreams: true,
     canManageMembers: false,
     canCreateInvites: false,
     canViewAuditLogs: false,
@@ -53,6 +59,8 @@ const PERMISSIONS_BY_ROLE: Record<OrganizationRole, PermissionSet> = {
     canEditWorkflows: false,
     canPublishWorkflows: false,
     canArchiveWorkflows: false,
+    canTriggerWorkflows: true,
+    canViewStreams: true,
     canManageMembers: false,
     canCreateInvites: false,
     canViewAuditLogs: true,
@@ -65,6 +73,8 @@ const PERMISSIONS_BY_ROLE: Record<OrganizationRole, PermissionSet> = {
     canEditWorkflows: false,
     canPublishWorkflows: false,
     canArchiveWorkflows: false,
+    canTriggerWorkflows: false,
+    canViewStreams: false,
     canManageMembers: false,
     canCreateInvites: false,
     canViewAuditLogs: false,
@@ -116,6 +126,14 @@ export function canPublishWorkflows(role: OrganizationRole): boolean {
 
 export function canArchiveWorkflows(role: OrganizationRole): boolean {
   return getRolePermissions(role).canArchiveWorkflows;
+}
+
+export function canTriggerWorkflows(role: OrganizationRole): boolean {
+  return getRolePermissions(role).canTriggerWorkflows;
+}
+
+export function canViewStreams(role: OrganizationRole): boolean {
+  return getRolePermissions(role).canViewStreams;
 }
 
 export function canCreateInvites(role: OrganizationRole): boolean {
