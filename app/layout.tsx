@@ -19,7 +19,28 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Nexus Orchestrator",
-  description: "Authentication-enabled Nexus Orchestrator app.",
+  description:
+    "Enterprise Automation OS - Scale operations globally with high-performance multi-tenancy.",
+  openGraph: {
+    title: "Nexus Orchestrator",
+    description: "Enterprise Automation OS",
+    url: "https://nexus-orchestrator.ziadhatem.dev",
+    siteName: "Nexus Orchestrator",
+    images: [
+      {
+        url: "/opengraph-image.webp",
+        width: 1200,
+        height: 630,
+      },
+    ],
+    locale: "en_US",
+    type: "website",
+  },
+  icons: {
+    icon: "/favicon.ico",
+    shortcut: "/favicon-16x16.png",
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export default async function RootLayout({

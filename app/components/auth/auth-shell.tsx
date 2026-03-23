@@ -162,8 +162,12 @@ export function AuthFooterMeta({
     >
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center justify-center gap-3 sm:justify-start">
-          <div className="premium-gradient flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-[var(--on-primary)] shadow-[0_10px_24px_rgba(0,95,158,0.18)]">
-            <ShieldCheck className="h-4 w-4" />
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl shadow-[0_10px_24px_rgba(0,95,158,0.18)] overflow-hidden bg-white/5 p-1.5 border border-outline-variant/20">
+            <img
+              src="/website_logo.png"
+              alt="Logo"
+              className="w-full h-full object-contain"
+            />
           </div>
           <div className="text-center sm:text-left">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--on-surface-variant)]">

@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
+import Image from "next/image";
 import { Canvas } from "@react-three/fiber";
 import { Particles } from "./medusae";
 
@@ -143,8 +144,14 @@ const Navbar = ({ constrainedMotion }: { constrainedMotion: boolean }) => {
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 flex justify-between items-center">
         <Link href="/" className="flex items-center gap-2 shrink-0">
-          <div className="w-8 h-8 premium-gradient rounded-lg flex items-center justify-center shadow-sm">
-            <Network className="text-(--on-primary) w-5 h-5" />
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center shadow-sm overflow-hidden bg-white/5 p-1 border border-outline-variant/20">
+            <Image
+              src="/website_logo.png"
+              alt="Logo"
+              width={32}
+              height={32}
+              className="w-full h-full object-contain"
+            />
           </div>
           <span className="text-lg sm:text-xl font-black tracking-tight text-on-surface truncate">
             Nexus<span className="hidden sm:inline"> Orchestrator</span>
@@ -491,8 +498,14 @@ const Footer = () => (
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-12 mb-20">
         <div className="col-span-2 lg:col-span-2">
           <div className="flex items-center gap-2 mb-6">
-            <div className="w-6 h-6 bg-primary rounded flex items-center justify-center">
-              <Network className="text-white w-4 h-4" />
+            <div className="w-6 h-6 rounded flex items-center justify-center overflow-hidden bg-white/5 p-0.5 border border-outline-variant/20">
+              <Image
+                src="/website_logo.png"
+                alt="Logo"
+                width={24}
+                height={24}
+                className="w-full h-full object-contain"
+              />
             </div>
             <span className="text-lg font-black tracking-tight text-on-surface">
               Nexus Orchestrator

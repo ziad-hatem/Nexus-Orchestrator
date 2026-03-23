@@ -70,9 +70,7 @@ export function WorkspaceShell({
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   useEffect(() => {
-    if (
-      window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) !== "true"
-    ) {
+    if (window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) !== "true") {
       return;
     }
 
@@ -147,8 +145,12 @@ export function WorkspaceShell({
               collapsed && !mobile ? "flex-col items-center gap-4" : "gap-4",
             )}
           >
-            <div className="premium-gradient flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl text-base font-bold tracking-[0.14em] text-[var(--on-primary)] shadow-[0_12px_30px_rgba(0,95,158,0.2)]">
-              {compactMonogram}
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl shadow-[0_12px_30px_rgba(0,95,158,0.2)] overflow-hidden bg-white/5 p-2.5 border border-outline-variant/20">
+              <img
+                src="/website_logo.png"
+                alt="Logo"
+                className="w-full h-full object-contain"
+              />
             </div>
             <div
               aria-hidden={collapsed && !mobile}
@@ -236,7 +238,8 @@ export function WorkspaceShell({
             active organizations
           </p>
           <p className="mt-2 text-xs text-[var(--on-surface-variant)]">
-            Stay inside the correct tenant by switching organizations before you manage people, roles, or audit data.
+            Stay inside the correct tenant by switching organizations before you
+            manage people, roles, or audit data.
           </p>
           <Link
             href="/org/select"
