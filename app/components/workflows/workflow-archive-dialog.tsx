@@ -1,11 +1,12 @@
 "use client";
 
-import { type ComponentProps, useEffect, useState } from "react";
+import { type ComponentProps, useState } from "react";
 import { AlertTriangle, Archive, Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { FormStatusMessage } from "@/app/components/a11y/form-status-message";
 import { Button } from "@/app/components/ui/button";
+import { GlobalModal } from "@/app/components/ui/global-modal";
 
 type WorkflowArchiveDialogProps = {
   orgSlug: string;
@@ -33,21 +34,6 @@ export function WorkflowArchiveDialog({
   const [loading, setLoading] = useState(false);
   const [reason, setReason] = useState("");
   const [feedback, setFeedback] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpen(false);
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open]);
 
   const handleArchive = async () => {
     setLoading(true);
@@ -97,25 +83,18 @@ export function WorkflowArchiveDialog({
         variant={triggerVariant}
         className={triggerClassName}
         disabled={disabled}
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setFeedback(null);
+          setOpen(true);
+        }}
       >
         <Archive className="h-4 w-4" />
         {triggerLabel}
       </Button>
 
-      {open ? (
-        <div
-          className="fixed inset-0 z-[140] flex items-center justify-center bg-[rgba(11,28,48,0.52)] px-4 py-8 backdrop-blur-sm"
-          role="presentation"
-          onClick={() => setOpen(false)}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="archive-workflow-title"
-            className="glass-panel-strong w-full max-w-2xl rounded-[1.85rem] p-6 shadow-[0_20px_44px_rgba(4,17,29,0.3)] sm:p-8"
-            onClick={(event) => event.stopPropagation()}
-          >
+      <GlobalModal open={open} onClose={() => setOpen(false)} titleId="archive-workflow-title">
+        <div className="flex min-h-full flex-1 items-center justify-center overflow-y-auto px-4 py-6 sm:px-6 sm:py-8">
+          <div className="glass-panel-strong w-full max-w-2xl rounded-[1.85rem] p-6 shadow-[0_20px_44px_rgba(4,17,29,0.3)] sm:p-8">
             <div className="flex items-start gap-4">
               <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[1.25rem] bg-[var(--error-container)] text-[var(--error)]">
                 <AlertTriangle className="h-6 w-6" />
@@ -129,7 +108,9 @@ export function WorkflowArchiveDialog({
                   Freeze future changes for {workflowName}
                 </h2>
                 <p className="mt-3 text-sm leading-6 text-[var(--on-surface-variant)]">
-                  Archived workflows remain visible with version history intact, but they can no longer receive new drafts or published versions in this phase.
+                  Archived workflows remain visible with version history intact, but
+                  they can no longer receive new drafts or published versions in this
+                  phase.
                 </p>
               </div>
             </div>
@@ -189,7 +170,7 @@ export function WorkflowArchiveDialog({
             </div>
           </div>
         </div>
-      ) : null}
+      </GlobalModal>
     </>
   );
 }

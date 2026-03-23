@@ -16,10 +16,21 @@ type RouteContext = {
   params: Promise<{ orgSlug: string; workflowId: string }>;
 };
 
+export const workflowDraftRouteDeps = {
+  auth,
+  createRequestLogger,
+  handleRouteError,
+  getApiOrgAccess,
+  canEditWorkflows,
+  updateWorkflowDraftSchema,
+  getOrCreateWorkflowDraft,
+  updateWorkflowDraft,
+};
+
 export async function GET(req: Request, { params }: RouteContext) {
-  const session = await auth();
+  const session = await workflowDraftRouteDeps.auth();
   const { orgSlug, workflowId } = await params;
-  const logger = createRequestLogger(req, {
+  const logger = workflowDraftRouteDeps.createRequestLogger(req, {
     route: "api.orgs.workflows.draft.get",
     organizationSlug: orgSlug,
     workflowId,
@@ -27,7 +38,7 @@ export async function GET(req: Request, { params }: RouteContext) {
   });
 
   try {
-    const access = await getApiOrgAccess({
+    const access = await workflowDraftRouteDeps.getApiOrgAccess({
       orgSlug,
       userId: session?.user?.id,
     });
@@ -35,11 +46,11 @@ export async function GET(req: Request, { params }: RouteContext) {
     if (!access.ok) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
-    if (!canEditWorkflows(access.context.membership.role)) {
+    if (!workflowDraftRouteDeps.canEditWorkflows(access.context.membership.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const draft = await getOrCreateWorkflowDraft({
+    const draft = await workflowDraftRouteDeps.getOrCreateWorkflowDraft({
       organizationId: access.context.organization.id,
       workflowId,
       userId: access.context.userId,
@@ -55,7 +66,7 @@ export async function GET(req: Request, { params }: RouteContext) {
         : error instanceof WorkflowConflictError
           ? 409
           : 500;
-    return handleRouteError(error, {
+    return workflowDraftRouteDeps.handleRouteError(error, {
       request: req,
       logger,
       fallbackMessage: "Failed to load workflow draft",
@@ -72,9 +83,9 @@ export async function GET(req: Request, { params }: RouteContext) {
 }
 
 export async function PATCH(req: Request, { params }: RouteContext) {
-  const session = await auth();
+  const session = await workflowDraftRouteDeps.auth();
   const { orgSlug, workflowId } = await params;
-  const logger = createRequestLogger(req, {
+  const logger = workflowDraftRouteDeps.createRequestLogger(req, {
     route: "api.orgs.workflows.draft.patch",
     organizationSlug: orgSlug,
     workflowId,
@@ -88,7 +99,7 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const parsed = updateWorkflowDraftSchema.safeParse(body);
+  const parsed = workflowDraftRouteDeps.updateWorkflowDraftSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
       { error: parsed.error.issues[0]?.message ?? "Invalid workflow draft payload" },
@@ -97,7 +108,7 @@ export async function PATCH(req: Request, { params }: RouteContext) {
   }
 
   try {
-    const access = await getApiOrgAccess({
+    const access = await workflowDraftRouteDeps.getApiOrgAccess({
       orgSlug,
       userId: session?.user?.id,
     });
@@ -105,11 +116,11 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     if (!access.ok) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
-    if (!canEditWorkflows(access.context.membership.role)) {
+    if (!workflowDraftRouteDeps.canEditWorkflows(access.context.membership.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const draft = await updateWorkflowDraft({
+    const draft = await workflowDraftRouteDeps.updateWorkflowDraft({
       organizationId: access.context.organization.id,
       workflowId,
       userId: access.context.userId,
@@ -127,7 +138,7 @@ export async function PATCH(req: Request, { params }: RouteContext) {
         : error instanceof WorkflowConflictError
           ? 409
           : 500;
-    return handleRouteError(error, {
+    return workflowDraftRouteDeps.handleRouteError(error, {
       request: req,
       logger,
       fallbackMessage: "Failed to update workflow draft",

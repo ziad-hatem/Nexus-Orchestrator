@@ -17,10 +17,7 @@ import {
 } from "@/lib/server/validation";
 import { validateTemplateString } from "@/lib/server/actions/templating";
 
-function pushIssue(
-  issues: ValidationIssue[],
-  issue: ValidationIssue,
-): void {
+function pushIssue(issues: ValidationIssue[], issue: ValidationIssue): void {
   issues.push(issue);
 }
 
@@ -85,7 +82,9 @@ function validateActionConfig(
       const url = toStringValue(config.url);
       const method = toStringValue(config.method) || "POST";
       const headers =
-        config.headers && typeof config.headers === "object" && !Array.isArray(config.headers)
+        config.headers &&
+        typeof config.headers === "object" &&
+        !Array.isArray(config.headers)
           ? (config.headers as Record<string, unknown>)
           : {};
       const body = typeof config.body === "string" ? config.body : "";
@@ -147,7 +146,10 @@ function validateActionConfig(
           actionId: action.id,
           path: `config.headers.${headerName}`,
           code: "invalid_send_webhook_header_template",
-          value: typeof headerValue === "string" ? headerValue : JSON.stringify(headerValue),
+          value:
+            typeof headerValue === "string"
+              ? headerValue
+              : JSON.stringify(headerValue),
           invalidMessage:
             "Webhook header templates may only use {{ payload.* }} and {{ context.* }} tokens.",
         });
@@ -195,7 +197,8 @@ function validateActionConfig(
           pushIssue(issues, {
             path: `config.actions.${action.id}.config.to`,
             code: "invalid_send_email_to",
-            message: "Send email actions must use a valid recipient email address.",
+            message:
+              "Send email actions must use a valid recipient email address.",
             severity: "error",
           });
         }
@@ -254,7 +257,8 @@ function validateActionConfig(
           pushIssue(issues, {
             path: `config.actions.${action.id}.config.replyTo`,
             code: "invalid_send_email_reply_to",
-            message: "Reply-to must be a valid email address when it is static.",
+            message:
+              "Reply-to must be a valid email address when it is static.",
             severity: "error",
           });
         }
@@ -264,7 +268,8 @@ function validateActionConfig(
     }
     case "create_task": {
       const title = typeof config.title === "string" ? config.title : "";
-      const description = typeof config.description === "string" ? config.description : "";
+      const description =
+        typeof config.description === "string" ? config.description : "";
       const assigneeEmail = toStringValue(config.assigneeEmail);
       const dueAt = toStringValue(config.dueAt);
 
@@ -317,7 +322,8 @@ function validateActionConfig(
           pushIssue(issues, {
             path: `config.actions.${action.id}.config.assigneeEmail`,
             code: "invalid_create_task_assignee",
-            message: "Task assignee must be a valid email address when it is static.",
+            message:
+              "Task assignee must be a valid email address when it is static.",
             severity: "error",
           });
         }
@@ -338,7 +344,8 @@ function validateActionConfig(
           pushIssue(issues, {
             path: `config.actions.${action.id}.config.dueAt`,
             code: "invalid_create_task_due_at",
-            message: "Task due date must be a valid date or datetime when it is static.",
+            message:
+              "Task due date must be a valid date or datetime when it is static.",
             severity: "error",
           });
         }
@@ -347,8 +354,10 @@ function validateActionConfig(
       break;
     }
     case "update_record_field": {
-      const recordType = typeof config.recordType === "string" ? config.recordType : "";
-      const recordKey = typeof config.recordKey === "string" ? config.recordKey : "";
+      const recordType =
+        typeof config.recordType === "string" ? config.recordType : "";
+      const recordKey =
+        typeof config.recordKey === "string" ? config.recordKey : "";
       const field = typeof config.field === "string" ? config.field : "";
       const valueType = toStringValue(config.valueType) || "string";
       const valueTemplate =
@@ -410,7 +419,10 @@ function validateActionConfig(
             "Record field keys must stay static safe identifiers and may not use templating.",
         });
 
-        if (hasRuntimeTemplateTokens(field) || !isSafeWorkflowRecordFieldKey(field)) {
+        if (
+          hasRuntimeTemplateTokens(field) ||
+          !isSafeWorkflowRecordFieldKey(field)
+        ) {
           pushIssue(issues, {
             path: `config.actions.${action.id}.config.field`,
             code: "unsafe_update_record_field",
@@ -421,7 +433,9 @@ function validateActionConfig(
         }
       }
 
-      if (!["string", "number", "boolean", "null", "json"].includes(valueType)) {
+      if (
+        !["string", "number", "boolean", "null", "json"].includes(valueType)
+      ) {
         pushIssue(issues, {
           path: `config.actions.${action.id}.config.valueType`,
           code: "invalid_update_record_value_type",
@@ -434,7 +448,8 @@ function validateActionConfig(
         pushIssue(issues, {
           path: `config.actions.${action.id}.config.valueTemplate`,
           code: "missing_update_record_value_template",
-          message: "Update record actions require a value template unless the type is null.",
+          message:
+            "Update record actions require a value template unless the type is null.",
           severity: "error",
         });
       }
@@ -545,11 +560,44 @@ function validateConditionConfig(
   }
 }
 
+function findCycleStart(
+  startNodeId: string,
+  adjacency: Map<string, string[]>,
+): string | null {
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+
+  const visit = (nodeId: string): string | null => {
+    if (visiting.has(nodeId)) {
+      return nodeId;
+    }
+    if (visited.has(nodeId)) {
+      return null;
+    }
+
+    visiting.add(nodeId);
+    for (const nextNodeId of adjacency.get(nodeId) ?? []) {
+      const cycleNodeId = visit(nextNodeId);
+      if (cycleNodeId) {
+        return cycleNodeId;
+      }
+    }
+    visiting.delete(nodeId);
+    visited.add(nodeId);
+    return null;
+  };
+
+  return visit(startNodeId);
+}
+
 export function validateWorkflowDraftDocument(
   draft: WorkflowDraftDocument,
 ): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
-  const expectedNodeTypes = new Map<string, WorkflowDraftDocument["canvas"]["nodes"][number]["type"]>();
+  const expectedNodeTypes = new Map<
+    string,
+    WorkflowDraftDocument["canvas"]["nodes"][number]["type"]
+  >();
 
   if (!draft.metadata.name.trim()) {
     pushIssue(issues, {
@@ -609,7 +657,9 @@ export function validateWorkflowDraftDocument(
         });
       }
 
-      const method = String(draft.config.trigger.config.method ?? "POST").trim();
+      const method = String(
+        draft.config.trigger.config.method ?? "POST",
+      ).trim();
       if (method !== "POST") {
         pushIssue(issues, {
           path: `config.trigger.${draft.config.trigger.id}.config.method`,
@@ -627,7 +677,7 @@ export function validateWorkflowDraftDocument(
           path: `config.trigger.${draft.config.trigger.id}.config.eventKey`,
           code: "invalid_internal_event_key",
           message:
-            "Internal event triggers must subscribe to ticket.created or payment.failed.",
+            "Internal event triggers must subscribe to a supported event like organization.created or membership.suspended.",
           severity: "error",
         });
       }
@@ -657,7 +707,9 @@ export function validateWorkflowDraftDocument(
   const nodeMap = new Map(
     draft.canvas.nodes.map((node) => [node.id, node] as const),
   );
-  const triggerNodes = draft.canvas.nodes.filter((node) => node.type === "trigger");
+  const triggerNodes = draft.canvas.nodes.filter(
+    (node) => node.type === "trigger",
+  );
 
   if (draft.config.trigger) {
     expectedNodeTypes.set(draft.config.trigger.id, "trigger");
@@ -813,13 +865,24 @@ export function validateWorkflowDraftDocument(
       pushIssue(issues, {
         path: `canvas.nodes.${action.id}.outgoing`,
         code: "action_must_be_terminal",
-        message: "Action nodes cannot connect to downstream nodes in this phase.",
+        message:
+          "Action nodes cannot connect to downstream nodes in this phase.",
         severity: "error",
       });
     }
   }
 
   if (triggerNodes.length === 1) {
+    const cycleNodeId = findCycleStart(triggerNodes[0].id, adjacency);
+    if (cycleNodeId) {
+      pushIssue(issues, {
+        path: `canvas.nodes.${cycleNodeId}.cycle`,
+        code: "workflow_cycle_detected",
+        message: `Workflow paths cannot contain cycles. Node "${cycleNodeId}" participates in a loop.`,
+        severity: "error",
+      });
+    }
+
     const visited = new Set<string>();
     const queue = [triggerNodes[0].id];
 

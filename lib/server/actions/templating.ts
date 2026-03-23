@@ -19,19 +19,55 @@ export class TemplateRenderError extends Error {
 
 const TEMPLATE_TOKEN_INNER_PATTERN = /^(payload|context)\.[A-Za-z0-9_.-]+$/;
 const EXACT_TOKEN_PATTERN = /^{{\s*((?:payload|context)\.[A-Za-z0-9_.-]+)\s*}}$/;
+const TEMPLATE_PATH_SEGMENT_PATTERN = /^[A-Za-z0-9_-]+$/;
+const FORBIDDEN_PATH_SEGMENTS = new Set([
+  "__proto__",
+  "constructor",
+  "prototype",
+]);
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
+export function isValidTemplateTokenPath(path: string): boolean {
+  if (!path.trim()) {
+    return false;
+  }
+
+  return path.split(".").every((segment) => {
+    return (
+      Boolean(segment) &&
+      TEMPLATE_PATH_SEGMENT_PATTERN.test(segment) &&
+      !FORBIDDEN_PATH_SEGMENTS.has(segment)
+    );
+  });
+}
+
 function resolvePath(root: Record<string, unknown>, path: string): unknown {
+  if (!isValidTemplateTokenPath(path)) {
+    return undefined;
+  }
+
   let current: unknown = root;
-  for (const segment of path.split(".").filter(Boolean)) {
+  for (const segment of path.split(".")) {
+    if (Array.isArray(current)) {
+      const index = Number(segment);
+      if (!Number.isInteger(index) || index < 0) {
+        return undefined;
+      }
+
+      current = current[index];
+      continue;
+    }
+
     if (!isPlainObject(current)) {
       return undefined;
     }
 
-    current = current[segment];
+    current = Object.prototype.hasOwnProperty.call(current, segment)
+      ? current[segment]
+      : undefined;
   }
 
   return current;
@@ -101,7 +137,13 @@ export function validateTemplateString(value: string): TemplateValidationIssue[]
 
     const rawToken = value.slice(start, end + 2);
     const innerToken = value.slice(start + 2, end).trim();
-    if (!TEMPLATE_TOKEN_INNER_PATTERN.test(innerToken)) {
+    const [scope, ...pathSegments] = innerToken.split(".");
+    const path = pathSegments.join(".");
+    if (
+      !TEMPLATE_TOKEN_INNER_PATTERN.test(innerToken) ||
+      (scope !== "payload" && scope !== "context") ||
+      !isValidTemplateTokenPath(path)
+    ) {
       issues.push({
         index: start,
         token: rawToken,

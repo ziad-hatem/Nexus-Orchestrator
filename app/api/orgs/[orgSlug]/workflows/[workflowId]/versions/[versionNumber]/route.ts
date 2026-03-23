@@ -18,10 +18,20 @@ type RouteContext = {
   }>;
 };
 
+export const workflowVersionRouteDeps = {
+  auth,
+  createRequestLogger,
+  handleRouteError,
+  getApiOrgAccess,
+  canViewWorkflows,
+  workflowVersionNumberSchema,
+  getWorkflowVersionSnapshot,
+};
+
 export async function GET(req: Request, { params }: RouteContext) {
-  const session = await auth();
+  const session = await workflowVersionRouteDeps.auth();
   const { orgSlug, workflowId, versionNumber } = await params;
-  const logger = createRequestLogger(req, {
+  const logger = workflowVersionRouteDeps.createRequestLogger(req, {
     route: "api.orgs.workflows.version.get",
     organizationSlug: orgSlug,
     workflowId,
@@ -29,7 +39,10 @@ export async function GET(req: Request, { params }: RouteContext) {
     userId: session?.user?.id ?? null,
   });
 
-  const parsedVersion = workflowVersionNumberSchema.safeParse(versionNumber);
+  const parsedVersion =
+    workflowVersionRouteDeps.workflowVersionNumberSchema.safeParse(
+      versionNumber,
+    );
   if (!parsedVersion.success) {
     return NextResponse.json(
       { error: parsedVersion.error.issues[0]?.message ?? "Invalid version number" },
@@ -38,7 +51,7 @@ export async function GET(req: Request, { params }: RouteContext) {
   }
 
   try {
-    const access = await getApiOrgAccess({
+    const access = await workflowVersionRouteDeps.getApiOrgAccess({
       orgSlug,
       userId: session?.user?.id,
     });
@@ -46,11 +59,11 @@ export async function GET(req: Request, { params }: RouteContext) {
     if (!access.ok) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
-    if (!canViewWorkflows(access.context.membership.role)) {
+    if (!workflowVersionRouteDeps.canViewWorkflows(access.context.membership.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const version = await getWorkflowVersionSnapshot({
+    const version = await workflowVersionRouteDeps.getWorkflowVersionSnapshot({
       organizationId: access.context.organization.id,
       workflowId,
       versionNumber: parsedVersion.data,
@@ -61,7 +74,7 @@ export async function GET(req: Request, { params }: RouteContext) {
     const message =
       error instanceof Error ? error.message : "Failed to load workflow version";
     const status = error instanceof WorkflowNotFoundError ? 404 : 500;
-    return handleRouteError(error, {
+    return workflowVersionRouteDeps.handleRouteError(error, {
       request: req,
       logger,
       fallbackMessage: "Failed to load workflow version",

@@ -17,15 +17,25 @@ type RouteContext = {
   params: Promise<{ orgSlug: string; workflowId: string }>;
 };
 
+export const manualTriggerRouteDeps = {
+  auth,
+  createRequestLogger,
+  handleRouteError,
+  getApiOrgAccess,
+  canTriggerWorkflows,
+  manualTriggerRequestSchema,
+  executeManualTrigger,
+};
+
 function getRequestIp(request: Request): string | null {
   const header = request.headers.get("x-forwarded-for");
   return header?.split(",")[0]?.trim() || null;
 }
 
 export async function POST(req: Request, { params }: RouteContext) {
-  const session = await auth();
+  const session = await manualTriggerRouteDeps.auth();
   const { orgSlug, workflowId } = await params;
-  const logger = createRequestLogger(req, {
+  const logger = manualTriggerRouteDeps.createRequestLogger(req, {
     route: "api.orgs.workflows.trigger.manual.post",
     organizationSlug: orgSlug,
     workflowId,
@@ -34,12 +44,13 @@ export async function POST(req: Request, { params }: RouteContext) {
 
   let body: unknown = {};
   try {
-    body = await req.json();
+    const rawBody = await req.text();
+    body = rawBody.trim() ? JSON.parse(rawBody) : {};
   } catch {
-    body = {};
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const parsed = manualTriggerRequestSchema.safeParse(body);
+  const parsed = manualTriggerRouteDeps.manualTriggerRequestSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
       {
@@ -51,7 +62,7 @@ export async function POST(req: Request, { params }: RouteContext) {
   }
 
   try {
-    const access = await getApiOrgAccess({
+    const access = await manualTriggerRouteDeps.getApiOrgAccess({
       orgSlug,
       userId: session?.user?.id,
     });
@@ -59,11 +70,11 @@ export async function POST(req: Request, { params }: RouteContext) {
     if (!access.ok) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
-    if (!canTriggerWorkflows(access.context.membership.role)) {
+    if (!manualTriggerRouteDeps.canTriggerWorkflows(access.context.membership.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const result = await executeManualTrigger({
+    const result = await manualTriggerRouteDeps.executeManualTrigger({
       organizationId: access.context.organization.id,
       workflowId,
       userId: access.context.userId,
@@ -89,7 +100,7 @@ export async function POST(req: Request, { params }: RouteContext) {
       return NextResponse.json({ error: error.message }, { status: 202 });
     }
 
-    return handleRouteError(error, {
+    return manualTriggerRouteDeps.handleRouteError(error, {
       request: req,
       logger,
       fallbackMessage: "Failed to execute manual trigger",

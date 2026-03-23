@@ -1,3 +1,4 @@
+import { OrgRealtimeRefresh } from "@/app/components/realtime/org-realtime-refresh";
 import { WorkflowTriggerStoreHydrator } from "@/app/components/workflows/workflow-trigger-store-hydrator";
 import { WorkflowStreamTable } from "@/app/components/workflows/workflow-stream-table";
 import { firstSearchParam } from "@/lib/search-params";
@@ -50,6 +51,7 @@ export default async function StreamsPage({
 
   return (
     <>
+      <OrgRealtimeRefresh orgSlug={orgSlug} channel="streams" />
       <WorkflowTriggerStoreHydrator
         streams={{
           items: streams.items,

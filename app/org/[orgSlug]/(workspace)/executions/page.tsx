@@ -1,5 +1,6 @@
 import { ExecutionDirectory } from "@/app/components/executions/execution-directory";
 import { ExecutionStoreHydrator } from "@/app/components/executions/execution-store-hydrator";
+import { OrgRealtimeRefresh } from "@/app/components/realtime/org-realtime-refresh";
 import { firstSearchParam } from "@/lib/search-params";
 import { requirePageOrgAccess } from "@/lib/server/org-access";
 import { canViewExecutions } from "@/lib/server/permissions";
@@ -48,6 +49,7 @@ export default async function ExecutionDirectoryPage({
 
   return (
     <>
+      <OrgRealtimeRefresh orgSlug={orgSlug} channel="executions" />
       <ExecutionStoreHydrator
         directory={{
           items: result.items,

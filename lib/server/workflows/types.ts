@@ -7,11 +7,7 @@ export const WORKFLOW_LIFECYCLE_STATUSES = [
   "archived",
 ] as const;
 
-export const WORKFLOW_NODE_TYPES = [
-  "trigger",
-  "condition",
-  "action",
-] as const;
+export const WORKFLOW_NODE_TYPES = ["trigger", "condition", "action"] as const;
 
 export const WORKFLOW_TRIGGER_TYPES = [
   "schedule",
@@ -38,10 +34,7 @@ export const WORKFLOW_ACTION_TYPES = [
   "legacy_custom",
 ] as const;
 
-export const WORKFLOW_CONDITION_BRANCH_KEYS = [
-  "true",
-  "false",
-] as const;
+export const WORKFLOW_CONDITION_BRANCH_KEYS = ["true", "false"] as const;
 
 export const WORKFLOW_RECORD_VALUE_TYPES = [
   "string",
@@ -75,8 +68,11 @@ export const WORKFLOW_RUN_STATUSES = [
 ] as const;
 
 export const INTERNAL_EVENT_KEYS = [
-  "ticket.created",
-  "payment.failed",
+  "organization.created",
+  "organization.updated",
+  "membership.created",
+  "membership.updated",
+  "membership.suspended",
 ] as const;
 
 export type WorkflowLifecycleStatus =
@@ -87,8 +83,7 @@ export type SupportedWorkflowTriggerType =
   (typeof WORKFLOW_SUPPORTED_TRIGGER_TYPES)[number];
 export type SupportedWorkflowActionType =
   (typeof WORKFLOW_SUPPORTED_ACTION_TYPES)[number];
-export type WorkflowActionType =
-  (typeof WORKFLOW_ACTION_TYPES)[number];
+export type WorkflowActionType = (typeof WORKFLOW_ACTION_TYPES)[number];
 export type WorkflowConditionBranchKey =
   (typeof WORKFLOW_CONDITION_BRANCH_KEYS)[number];
 export type WorkflowRecordValueType =
@@ -490,7 +485,8 @@ function buildLegacyCustomAction(params: {
     toStringValue(params.action.operation) ||
     toStringValue(params.rawConfig.operation);
   const legacyTarget =
-    toStringValue(params.action.target) || toStringValue(params.rawConfig.target);
+    toStringValue(params.action.target) ||
+    toStringValue(params.rawConfig.target);
 
   return {
     id: toStringValue(params.action.id) || createWorkflowEntityId("action"),
@@ -559,7 +555,9 @@ function normalizeSupportedWorkflowActionConfig(
         recordKey: toStringValue(rawConfig.recordKey).trim(),
         field: toStringValue(rawConfig.field).trim(),
         valueType:
-          typeof rawConfig.valueType === "string" ? rawConfig.valueType : "string",
+          typeof rawConfig.valueType === "string"
+            ? rawConfig.valueType
+            : "string",
         valueTemplate: toStringValue(rawConfig.valueTemplate),
       };
   }
@@ -619,9 +617,7 @@ function normalizeWorkflowActionRecord(value: unknown): WorkflowActionConfig {
       const templateReference = toStringValue(rawConfig.template);
       const message = toStringValue(rawConfig.message);
       const subject =
-        rawLabel.trim() ||
-        templateReference.trim() ||
-        "Workflow notification";
+        rawLabel.trim() || templateReference.trim() || "Workflow notification";
 
       return {
         id: toStringValue(action.id) || createWorkflowEntityId("action"),
@@ -662,7 +658,12 @@ function normalizeWorkflowActionRecord(value: unknown): WorkflowActionConfig {
     });
   }
 
-  if (rawType === "legacy_custom" || legacyOperation || legacyTarget || rawType) {
+  if (
+    rawType === "legacy_custom" ||
+    legacyOperation ||
+    legacyTarget ||
+    rawType
+  ) {
     return buildLegacyCustomAction({
       action,
       rawConfig,
@@ -734,7 +735,9 @@ export function createWorkflowCorrelationId(): string {
   return createWorkflowEntityId("corr").replace(/^corr-/, "corr_");
 }
 
-export function isWorkflowActionType(value: unknown): value is WorkflowActionType {
+export function isWorkflowActionType(
+  value: unknown,
+): value is WorkflowActionType {
   return (
     typeof value === "string" &&
     WORKFLOW_ACTION_TYPES.includes(value as WorkflowActionType)
@@ -757,9 +760,7 @@ export function isWorkflowConditionBranchKey(
 ): value is WorkflowConditionBranchKey {
   return (
     typeof value === "string" &&
-    WORKFLOW_CONDITION_BRANCH_KEYS.includes(
-      value as WorkflowConditionBranchKey,
-    )
+    WORKFLOW_CONDITION_BRANCH_KEYS.includes(value as WorkflowConditionBranchKey)
   );
 }
 
@@ -994,7 +995,7 @@ export function createEmptyWorkflowDraftDocument(params?: {
               ? "Webhook trigger"
               : triggerType === "internal_event"
                 ? "Internal event trigger"
-              : "Manual trigger",
+                : "Manual trigger",
         description: "",
         config:
           triggerType === "schedule"
@@ -1170,7 +1171,8 @@ export function normalizeWorkflowDraftDocument(
   const metadata = toRecord(record.metadata);
   const config = toRecord(record.config);
   const canvas = toRecord(record.canvas);
-  const triggerRecord = config.trigger === null ? null : toRecord(config.trigger);
+  const triggerRecord =
+    config.trigger === null ? null : toRecord(config.trigger);
 
   const draft: WorkflowDraftDocument = {
     metadata: {
@@ -1182,7 +1184,9 @@ export function normalizeWorkflowDraftDocument(
     config: {
       trigger: triggerRecord
         ? {
-            id: toStringValue(triggerRecord.id) || createWorkflowEntityId("trigger"),
+            id:
+              toStringValue(triggerRecord.id) ||
+              createWorkflowEntityId("trigger"),
             type:
               WORKFLOW_TRIGGER_TYPES.find(
                 (candidate) => candidate === triggerRecord.type,

@@ -3,6 +3,7 @@
 import * as Popover from "@radix-ui/react-popover";
 import Link from "next/link";
 import { ChevronDown, Building2 } from "lucide-react";
+import { cn } from "@/app/components/ui/utils";
 import { ROLE_LABELS } from "@/lib/server/permissions";
 import type { UserOrganizationMembership } from "@/lib/server/org-service";
 import { useWorkspaceStore } from "@/lib/stores/workspace-store";
@@ -10,11 +11,13 @@ import { useWorkspaceStore } from "@/lib/stores/workspace-store";
 type OrgSwitcherProps = {
   currentOrgSlug: string;
   memberships: UserOrganizationMembership[];
+  collapsed?: boolean;
 };
 
 export function OrgSwitcher({
   currentOrgSlug,
   memberships,
+  collapsed = false,
 }: OrgSwitcherProps) {
   const hydrated = useWorkspaceStore((state) => state.hydrated);
   const storeCurrentOrganizationSlug = useWorkspaceStore(
@@ -45,13 +48,32 @@ export function OrgSwitcher({
         <button
           type="button"
           aria-label={`Current organization: ${activeMembership.organizationName}. Open organization switcher.`}
-          className="micro-interactive flex min-w-[15rem] items-center justify-between rounded-2xl bg-[var(--surface-container-lowest)] px-4 py-3 text-left shadow-[0_12px_32px_rgba(11,28,48,0.06)]"
+          className={cn(
+            "micro-interactive flex items-center rounded-2xl bg-[var(--surface-container-lowest)] text-left shadow-[0_12px_32px_rgba(11,28,48,0.06)] transition-[width,padding] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+            collapsed
+              ? "h-14 w-14 justify-center"
+              : "min-w-[15rem] justify-between px-4 py-3",
+          )}
+          title={collapsed ? activeMembership.organizationName : undefined}
         >
-          <div className="flex min-w-0 items-center gap-3">
+          <div
+            className={cn(
+              "flex min-w-0 items-center",
+              collapsed ? "justify-center" : "gap-3",
+            )}
+          >
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--surface-container-high)] text-primary">
               <Building2 className="h-5 w-5" />
             </div>
-            <div className="min-w-0">
+            <div
+              aria-hidden={collapsed}
+              className={cn(
+                "min-w-0 overflow-hidden whitespace-nowrap transition-[max-width,opacity,margin,transform] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                collapsed
+                  ? "ml-0 max-w-0 -translate-x-2 opacity-0"
+                  : "ml-3 max-w-[11rem] translate-x-0 opacity-100",
+              )}
+            >
               <p className="truncate text-sm font-semibold text-[var(--on-surface)]">
                 {activeMembership.organizationName}
               </p>
@@ -60,7 +82,13 @@ export function OrgSwitcher({
               </p>
             </div>
           </div>
-          <ChevronDown className="h-4 w-4 text-[var(--outline)] transition-transform data-[state=open]:rotate-180" />
+          <ChevronDown
+            aria-hidden={collapsed}
+            className={cn(
+              "h-4 w-4 shrink-0 text-[var(--outline)] transition-[opacity,transform,width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] data-[state=open]:rotate-180",
+              collapsed ? "w-0 scale-90 opacity-0" : "w-4 scale-100 opacity-100",
+            )}
+          />
         </button>
       </Popover.Trigger>
 

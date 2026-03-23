@@ -20,17 +20,30 @@ type RouteContext = {
   params: Promise<{ orgSlug: string }>;
 };
 
+export const workflowsRouteDeps = {
+  auth,
+  createRequestLogger,
+  handleRouteError,
+  getApiOrgAccess,
+  canEditWorkflows,
+  canViewWorkflows,
+  createWorkflowSchema,
+  workflowListFilterSchema,
+  createWorkflow,
+  listWorkflows,
+};
+
 export async function GET(req: Request, { params }: RouteContext) {
-  const session = await auth();
+  const session = await workflowsRouteDeps.auth();
   const { orgSlug } = await params;
-  const logger = createRequestLogger(req, {
+  const logger = workflowsRouteDeps.createRequestLogger(req, {
     route: "api.orgs.workflows.get",
     organizationSlug: orgSlug,
     userId: session?.user?.id ?? null,
   });
 
   try {
-    const access = await getApiOrgAccess({
+    const access = await workflowsRouteDeps.getApiOrgAccess({
       orgSlug,
       userId: session?.user?.id,
     });
@@ -38,12 +51,12 @@ export async function GET(req: Request, { params }: RouteContext) {
     if (!access.ok) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
-    if (!canViewWorkflows(access.context.membership.role)) {
+    if (!workflowsRouteDeps.canViewWorkflows(access.context.membership.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const searchParams = new URL(req.url).searchParams;
-    const parsed = workflowListFilterSchema.safeParse({
+    const parsed = workflowsRouteDeps.workflowListFilterSchema.safeParse({
       query: searchParams.get("query") ?? undefined,
       status: searchParams.get("status") ?? undefined,
       category: searchParams.get("category") ?? undefined,
@@ -58,14 +71,14 @@ export async function GET(req: Request, { params }: RouteContext) {
       );
     }
 
-    const result = await listWorkflows({
+    const result = await workflowsRouteDeps.listWorkflows({
       organizationId: access.context.organization.id,
       filters: parsed.data,
     });
 
     return NextResponse.json(result, { status: 200 });
   } catch (error: unknown) {
-    return handleRouteError(error, {
+    return workflowsRouteDeps.handleRouteError(error, {
       request: req,
       logger,
       fallbackMessage: "Failed to load workflows",
@@ -78,9 +91,9 @@ export async function GET(req: Request, { params }: RouteContext) {
 }
 
 export async function POST(req: Request, { params }: RouteContext) {
-  const session = await auth();
+  const session = await workflowsRouteDeps.auth();
   const { orgSlug } = await params;
-  const logger = createRequestLogger(req, {
+  const logger = workflowsRouteDeps.createRequestLogger(req, {
     route: "api.orgs.workflows.post",
     organizationSlug: orgSlug,
     userId: session?.user?.id ?? null,
@@ -93,7 +106,7 @@ export async function POST(req: Request, { params }: RouteContext) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const parsed = createWorkflowSchema.safeParse(body);
+  const parsed = workflowsRouteDeps.createWorkflowSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
       { error: parsed.error.issues[0]?.message ?? "Invalid workflow payload" },
@@ -102,7 +115,7 @@ export async function POST(req: Request, { params }: RouteContext) {
   }
 
   try {
-    const access = await getApiOrgAccess({
+    const access = await workflowsRouteDeps.getApiOrgAccess({
       orgSlug,
       userId: session?.user?.id,
     });
@@ -110,11 +123,11 @@ export async function POST(req: Request, { params }: RouteContext) {
     if (!access.ok) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
-    if (!canEditWorkflows(access.context.membership.role)) {
+    if (!workflowsRouteDeps.canEditWorkflows(access.context.membership.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const draft = await createWorkflow({
+    const draft = await workflowsRouteDeps.createWorkflow({
       organizationId: access.context.organization.id,
       userId: access.context.userId,
       name: parsed.data.name,
@@ -133,7 +146,7 @@ export async function POST(req: Request, { params }: RouteContext) {
       { status: 201 },
     );
   } catch (error: unknown) {
-    return handleRouteError(error, {
+    return workflowsRouteDeps.handleRouteError(error, {
       request: req,
       logger,
       fallbackMessage: "Failed to create workflow",

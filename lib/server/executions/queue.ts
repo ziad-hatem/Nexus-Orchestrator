@@ -14,10 +14,18 @@ type UpstashPipelineResponse = Array<{
   error?: string;
 }>;
 
+export const executionQueueDeps = {
+  getOptionalEnv,
+  getRequiredEnv,
+  fetch: (...args: Parameters<typeof fetch>) => fetch(...args),
+};
+
 function getUpstashConfig() {
   return {
-    baseUrl: getRequiredEnv("UPSTASH_REDIS_REST_URL").replace(/\/+$/, ""),
-    token: getRequiredEnv("UPSTASH_REDIS_REST_TOKEN"),
+    baseUrl: executionQueueDeps
+      .getRequiredEnv("UPSTASH_REDIS_REST_URL")
+      .replace(/\/+$/, ""),
+    token: executionQueueDeps.getRequiredEnv("UPSTASH_REDIS_REST_TOKEN"),
   };
 }
 
@@ -32,7 +40,7 @@ function parsePositiveInteger(value: string | null, fallback: number): number {
 
 async function runPipeline(commands: unknown[][]): Promise<UpstashPipelineResponse> {
   const config = getUpstashConfig();
-  const response = await fetch(`${config.baseUrl}/pipeline`, {
+  const response = await executionQueueDeps.fetch(`${config.baseUrl}/pipeline`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${config.token}`,
@@ -85,27 +93,29 @@ function parseJob(raw: unknown): ExecutionQueueJob | null {
 
 export function getExecutionWorkerPollIntervalMs(): number {
   return parsePositiveInteger(
-    getOptionalEnv("EXECUTION_WORKER_POLL_INTERVAL_MS"),
+    executionQueueDeps.getOptionalEnv("EXECUTION_WORKER_POLL_INTERVAL_MS"),
     DEFAULT_POLL_INTERVAL_MS,
   );
 }
 
 export function getExecutionWorkerHeartbeatIntervalMs(): number {
   return parsePositiveInteger(
-    getOptionalEnv("EXECUTION_WORKER_HEARTBEAT_INTERVAL_MS"),
+    executionQueueDeps.getOptionalEnv("EXECUTION_WORKER_HEARTBEAT_INTERVAL_MS"),
     DEFAULT_HEARTBEAT_INTERVAL_MS,
   );
 }
 
 export function getExecutionMaxRetries(): number {
   return parsePositiveInteger(
-    getOptionalEnv("EXECUTION_MAX_RETRIES"),
+    executionQueueDeps.getOptionalEnv("EXECUTION_MAX_RETRIES"),
     DEFAULT_MAX_RETRIES,
   );
 }
 
 export function getExecutionRetryDelaysSeconds(): number[] {
-  const configured = getOptionalEnv("EXECUTION_RETRY_DELAYS_SECONDS");
+  const configured = executionQueueDeps.getOptionalEnv(
+    "EXECUTION_RETRY_DELAYS_SECONDS",
+  );
   if (!configured) {
     return [...DEFAULT_RETRY_DELAYS_SECONDS];
   }
@@ -120,7 +130,7 @@ export function getExecutionRetryDelaysSeconds(): number[] {
 
 export function getExecutionWebhookTimeoutMs(): number {
   return parsePositiveInteger(
-    getOptionalEnv("EXECUTION_WEBHOOK_TIMEOUT_MS"),
+    executionQueueDeps.getOptionalEnv("EXECUTION_WEBHOOK_TIMEOUT_MS"),
     DEFAULT_WEBHOOK_TIMEOUT_MS,
   );
 }

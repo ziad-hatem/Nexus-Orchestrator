@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { Loader2, Play, Send, X } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/app/components/ui/button";
 import { FormStatusMessage } from "@/app/components/a11y/form-status-message";
+import { Button } from "@/app/components/ui/button";
+import { GlobalModal } from "@/app/components/ui/global-modal";
 
 type WorkflowManualTriggerDialogProps = {
   orgSlug: string;
@@ -57,10 +58,9 @@ export function WorkflowManualTriggerDialog({
         throw new Error(result.error ?? "Failed to execute manual trigger");
       }
 
-      const message =
-        result.run?.runId
-          ? `Manual trigger accepted. Pending run ${result.run.runId} created.`
-          : result.error ?? "Manual trigger request completed.";
+      const message = result.run?.runId
+        ? `Manual trigger accepted. Pending run ${result.run.runId} created.`
+        : result.error ?? "Manual trigger request completed.";
 
       toast.success(message);
       setOpen(false);
@@ -82,25 +82,18 @@ export function WorkflowManualTriggerDialog({
         variant="outline"
         className="rounded-xl"
         disabled={disabled}
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setFeedback(null);
+          setOpen(true);
+        }}
       >
         <Play className="h-4 w-4" />
         Run now
       </Button>
 
-      {open ? (
-        <div
-          className="fixed inset-0 z-[145] flex items-center justify-center bg-[rgba(11,28,48,0.56)] px-4 py-8 backdrop-blur-sm"
-          role="presentation"
-          onClick={() => setOpen(false)}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="manual-trigger-title"
-            className="glass-panel-strong w-full max-w-3xl rounded-[1.85rem] p-6 shadow-[0_20px_44px_rgba(4,17,29,0.3)] sm:p-8"
-            onClick={(event) => event.stopPropagation()}
-          >
+      <GlobalModal open={open} onClose={() => setOpen(false)} titleId="manual-trigger-title">
+        <div className="flex min-h-full flex-1 items-center justify-center overflow-y-auto px-4 py-6 sm:px-6 sm:py-8">
+          <div className="glass-panel-strong w-full max-w-3xl rounded-[1.85rem] p-6 shadow-[0_20px_44px_rgba(4,17,29,0.3)] sm:p-8">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="label-caps">Manual trigger</p>
@@ -111,7 +104,8 @@ export function WorkflowManualTriggerDialog({
                   Execute {workflowName}
                 </h2>
                 <p className="mt-3 text-sm leading-6 text-[var(--on-surface-variant)]">
-                  Submit a JSON payload to create a pending run from the active published manual trigger binding.
+                  Submit a JSON payload to create a pending run from the active
+                  published manual trigger binding.
                 </p>
               </div>
 
@@ -191,7 +185,7 @@ export function WorkflowManualTriggerDialog({
             </div>
           </div>
         </div>
-      ) : null}
+      </GlobalModal>
     </>
   );
 }

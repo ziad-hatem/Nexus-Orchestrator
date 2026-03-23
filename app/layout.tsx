@@ -40,10 +40,8 @@ export default async function RootLayout({
       data-theme-preference={initialTheme.themePreference}
       className={`${geistSans.variable} ${geistMono.variable} h-fit antialiased`}
     >
-      <head>
-        <ThemeScript initialThemePreference={initialTheme.themePreference} />
-      </head>
       <body className="min-h-full flex flex-col">
+        <ThemeScript initialThemePreference={initialTheme.themePreference} />
         <SkipLink />
         <Providers
           initialResolvedTheme={initialTheme.resolvedTheme}

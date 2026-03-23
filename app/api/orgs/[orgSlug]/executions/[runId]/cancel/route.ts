@@ -15,10 +15,20 @@ type RouteContext = {
   params: Promise<{ orgSlug: string; runId: string }>;
 };
 
+export const executionCancelRouteDeps = {
+  auth,
+  createRequestLogger,
+  handleRouteError,
+  cancelWorkflowRun,
+  getApiOrgAccess,
+  canCancelRuns,
+  cancelRunSchema,
+};
+
 export async function POST(req: Request, { params }: RouteContext) {
-  const session = await auth();
+  const session = await executionCancelRouteDeps.auth();
   const { orgSlug, runId } = await params;
-  const logger = createRequestLogger(req, {
+  const logger = executionCancelRouteDeps.createRequestLogger(req, {
     route: "api.orgs.executions.run.cancel.post",
     organizationSlug: orgSlug,
     runId,
@@ -27,12 +37,13 @@ export async function POST(req: Request, { params }: RouteContext) {
 
   let body: unknown = {};
   try {
-    body = await req.json();
+    const rawBody = await req.text();
+    body = rawBody.trim() ? JSON.parse(rawBody) : {};
   } catch {
-    body = {};
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const parsed = cancelRunSchema.safeParse(body);
+  const parsed = executionCancelRouteDeps.cancelRunSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
       { error: parsed.error.issues[0]?.message ?? "Invalid cancellation payload" },
@@ -41,7 +52,7 @@ export async function POST(req: Request, { params }: RouteContext) {
   }
 
   try {
-    const access = await getApiOrgAccess({
+    const access = await executionCancelRouteDeps.getApiOrgAccess({
       orgSlug,
       userId: session?.user?.id,
     });
@@ -49,11 +60,11 @@ export async function POST(req: Request, { params }: RouteContext) {
     if (!access.ok) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
-    if (!canCancelRuns(access.context.membership.role)) {
+    if (!executionCancelRouteDeps.canCancelRuns(access.context.membership.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const result = await cancelWorkflowRun({
+    const result = await executionCancelRouteDeps.cancelWorkflowRun({
       organizationId: access.context.organization.id,
       runId,
       actorUserId: access.context.userId,
@@ -70,7 +81,7 @@ export async function POST(req: Request, { params }: RouteContext) {
       return NextResponse.json({ error: error.message }, { status: 409 });
     }
 
-    return handleRouteError(error, {
+    return executionCancelRouteDeps.handleRouteError(error, {
       request: req,
       logger,
       fallbackMessage: "Failed to cancel execution",

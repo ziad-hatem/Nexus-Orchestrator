@@ -12,21 +12,33 @@ import {
   evaluateOperationalAlerts,
 } from "@/lib/observability/alerts";
 
+export const executionWorkerDeps = {
+  drainDueExecutionJobs,
+  getExecutionQueueBacklog,
+  getExecutionWorkerPollIntervalMs,
+  popExecutionJob,
+  sleep,
+  processExecutionQueueJob,
+  appLogger,
+  emitOperationalAlert,
+  evaluateOperationalAlerts,
+};
+
 export async function startExecutionWorker(options?: { once?: boolean }) {
   const once = options?.once ?? false;
-  const pollInterval = getExecutionWorkerPollIntervalMs();
+  const pollInterval = executionWorkerDeps.getExecutionWorkerPollIntervalMs();
 
   do {
-    await drainDueExecutionJobs();
-    const backlog = await getExecutionQueueBacklog();
-    const [backlogAlert] = evaluateOperationalAlerts({
+    await executionWorkerDeps.drainDueExecutionJobs();
+    const backlog = await executionWorkerDeps.getExecutionQueueBacklog();
+    const [backlogAlert] = executionWorkerDeps.evaluateOperationalAlerts({
       queueBacklog: backlog.ready + backlog.delayed,
       staleRunningCount: 0,
       recentWebhookRejections: 0,
       retryExhaustionCount: 0,
     }).filter((candidate) => candidate.key === "queue_backlog");
     if (backlogAlert && backlogAlert.status !== "ok") {
-      emitOperationalAlert({
+      executionWorkerDeps.emitOperationalAlert({
         alert: backlogAlert,
         extras: {
           readyBacklog: backlog.ready,
@@ -35,17 +47,17 @@ export async function startExecutionWorker(options?: { once?: boolean }) {
       });
     }
 
-    const job = await popExecutionJob();
+    const job = await executionWorkerDeps.popExecutionJob();
     if (!job) {
       if (once) {
         return;
       }
 
-      await sleep(pollInterval);
+      await executionWorkerDeps.sleep(pollInterval);
       continue;
     }
 
-    appLogger.info(
+    executionWorkerDeps.appLogger.info(
       {
         runId: job.runKey,
         correlationId: job.correlationId,
@@ -55,9 +67,9 @@ export async function startExecutionWorker(options?: { once?: boolean }) {
     );
 
     try {
-      await processExecutionQueueJob(job);
+      await executionWorkerDeps.processExecutionQueueJob(job);
     } catch (error: unknown) {
-      appLogger.error(
+      executionWorkerDeps.appLogger.error(
         {
           err: error instanceof Error ? error.message : String(error),
           runId: job.runKey,

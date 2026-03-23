@@ -1,25 +1,16 @@
 import process from "node:process";
 import nextEnv from "@next/env";
 import pg from "pg";
+import {
+  buildRetentionCutoffs,
+  buildRetentionScrubMarker,
+  getRetentionPolicyFromEnv,
+} from "./retention-helpers.mjs";
 
 const { Client } = pg;
 const { loadEnvConfig } = nextEnv;
 
 loadEnvConfig(process.cwd());
-
-function getOptionalEnv(name) {
-  const value = process.env[name];
-  return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-function parsePositiveInteger(value, fallback) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return fallback;
-  }
-
-  return Math.floor(parsed);
-}
 
 function getDatabaseUrl() {
   const candidates = [
@@ -55,20 +46,6 @@ function buildClient(connectionString) {
           rejectUnauthorized: false,
         },
   });
-}
-
-function getRetentionPolicy() {
-  return {
-    auditLogDays: parsePositiveInteger(getOptionalEnv("AUDIT_LOG_RETENTION_DAYS"), 365),
-    executionLogDays: parsePositiveInteger(
-      getOptionalEnv("EXECUTION_LOG_RETENTION_DAYS"),
-      90,
-    ),
-    ingestionEventDays: parsePositiveInteger(
-      getOptionalEnv("INGESTION_EVENT_RETENTION_DAYS"),
-      30,
-    ),
-  };
 }
 
 async function countRows(client, table, cutoff) {
@@ -123,20 +100,12 @@ async function writeRetentionAuditEntries(client, organizationIds, metadata) {
 
 async function main() {
   const dryRun = process.argv.includes("--dry-run");
-  const retention = getRetentionPolicy();
+  const retention = getRetentionPolicyFromEnv(process.env);
   const connectionString = getDatabaseUrl();
   const client = buildClient(connectionString);
   const now = new Date();
-  const cutoffs = {
-    audit: new Date(now.getTime() - retention.auditLogDays * 24 * 60 * 60 * 1000),
-    execution: new Date(now.getTime() - retention.executionLogDays * 24 * 60 * 60 * 1000),
-    ingestion: new Date(now.getTime() - retention.ingestionEventDays * 24 * 60 * 60 * 1000),
-  };
-  const scrubMarker = {
-    retained: false,
-    reason: "retention_policy",
-    scrubbedAt: now.toISOString(),
-  };
+  const cutoffs = buildRetentionCutoffs(now, retention);
+  const scrubMarker = buildRetentionScrubMarker(now);
 
   console.log(`Connecting to database${dryRun ? " for dry run" : ""}...`);
   await client.connect();

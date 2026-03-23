@@ -2,11 +2,19 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, History, Loader2, Save, X } from "lucide-react";
+import {
+  CheckCircle2,
+  History,
+  Loader2,
+  Save,
+  Settings,
+  X,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { FormStatusMessage } from "@/app/components/a11y/form-status-message";
 import { Button } from "@/app/components/ui/button";
+import { GlobalModal } from "@/app/components/ui/global-modal";
 import { Input } from "@/app/components/ui/input";
 import { WorkflowFlowEditor } from "@/app/components/workflows/workflow-flow-editor";
 import { WorkflowNodeInspector } from "@/app/components/workflows/workflow-node-inspector";
@@ -50,7 +58,9 @@ function formatDateTime(value: string): string {
   }).format(new Date(value));
 }
 
-function cloneDraftDocument(draft: WorkflowDraftDocument): WorkflowDraftDocument {
+function cloneDraftDocument(
+  draft: WorkflowDraftDocument,
+): WorkflowDraftDocument {
   return JSON.parse(JSON.stringify(draft)) as WorkflowDraftDocument;
 }
 
@@ -124,6 +134,7 @@ export function WorkflowCanvasEditor({
     initialRenderableDraft.canvas.nodes[0]?.id ?? null,
   );
   const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState<{
     tone: "error" | "success";
@@ -150,7 +161,9 @@ export function WorkflowCanvasEditor({
   useEffect(() => {
     const selectedNodeStillExists =
       (draft.config.trigger?.id ?? null) === selectedNodeId ||
-      draft.config.conditions.some((condition) => condition.id === selectedNodeId) ||
+      draft.config.conditions.some(
+        (condition) => condition.id === selectedNodeId,
+      ) ||
       draft.config.actions.some((action) => action.id === selectedNodeId);
 
     if (selectedNodeStillExists) {
@@ -158,22 +171,12 @@ export function WorkflowCanvasEditor({
     }
 
     setInspectorOpen(false);
-  }, [draft.config.actions, draft.config.conditions, draft.config.trigger, selectedNodeId]);
-
-  useEffect(() => {
-    if (!inspectorOpen) {
-      return;
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setInspectorOpen(false);
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [inspectorOpen]);
+  }, [
+    draft.config.actions,
+    draft.config.conditions,
+    draft.config.trigger,
+    selectedNodeId,
+  ]);
 
   const isDirty = useMemo(
     () => JSON.stringify(draft) !== savedFingerprint,
@@ -346,10 +349,7 @@ export function WorkflowCanvasEditor({
       ...current,
       config: {
         ...current.config,
-        actions: [
-          ...current.config.actions,
-          action,
-        ],
+        actions: [...current.config.actions, action],
       },
       canvas: position
         ? appendCanvasNode(current.canvas, {
@@ -375,7 +375,9 @@ export function WorkflowCanvasEditor({
       ...current,
       config: {
         ...current.config,
-        actions: current.config.actions.filter((action) => action.id !== actionId),
+        actions: current.config.actions.filter(
+          (action) => action.id !== actionId,
+        ),
       },
     }));
   };
@@ -393,6 +395,28 @@ export function WorkflowCanvasEditor({
         return handleAddAction(position);
       default:
         return null;
+    }
+  };
+
+  const handleDeleteNode = (nodeId: string) => {
+    if (draft.config.trigger?.id === nodeId) {
+      updateDraft((current) => ({
+        ...current,
+        config: {
+          ...current.config,
+          trigger: null,
+        },
+      }));
+      return;
+    }
+
+    if (draft.config.conditions.some((c) => c.id === nodeId)) {
+      handleDeleteCondition(nodeId);
+      return;
+    }
+
+    if (draft.config.actions.some((a) => a.id === nodeId)) {
+      handleDeleteAction(nodeId);
     }
   };
 
@@ -426,7 +450,9 @@ export function WorkflowCanvasEditor({
         throw new Error(payload.error ?? "Failed to save workflow draft");
       }
 
-      const normalizedDraft = ensureDraftHasRenderableCanvas(payload.draft.draft);
+      const normalizedDraft = ensureDraftHasRenderableCanvas(
+        payload.draft.draft,
+      );
       setDraft(normalizedDraft);
       setUpdatedAt(payload.draft.updatedAt);
       setUpdatedBy(payload.draft.updatedBy);
@@ -441,7 +467,9 @@ export function WorkflowCanvasEditor({
       router.refresh();
     } catch (error: unknown) {
       const message =
-        error instanceof Error ? error.message : "Failed to save workflow draft";
+        error instanceof Error
+          ? error.message
+          : "Failed to save workflow draft";
       setFeedback({
         tone: "error",
         message,
@@ -461,8 +489,19 @@ export function WorkflowCanvasEditor({
         backLabel="Back to workflow"
         actions={
           <>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-xl"
+              onClick={() => setSettingsOpen(true)}
+            >
+              <Settings className="h-4 w-4" />
+              Settings
+            </Button>
             <Button asChild variant="outline" className="rounded-xl">
-              <Link href={`/org/${orgSlug}/workflows/${detail.workflowId}/history`}>
+              <Link
+                href={`/org/${orgSlug}/workflows/${detail.workflowId}/history`}
+              >
                 <History className="h-4 w-4" />
                 History
               </Link>
@@ -501,7 +540,9 @@ export function WorkflowCanvasEditor({
             {draft.metadata.name || "Untitled workflow"}
           </h1>
           <p className="mt-2 text-sm leading-6 text-[rgba(255,255,255,0.82)]">
-            Build the entire flow here: drag nodes, connect pass paths, edit typed conditions and actions, inspect validation, and publish only when the graph is production-ready.
+            Build the entire flow here: drag nodes, connect pass paths, edit
+            typed conditions and actions, inspect validation, and publish only
+            when the graph is production-ready.
           </p>
         </div>
 
@@ -552,149 +593,25 @@ export function WorkflowCanvasEditor({
             onOpenInspector={openInspectorForNode}
             onCanvasChange={handleCanvasChange}
             onCreateNode={handleCreateNode}
+            onDeleteNode={handleDeleteNode}
           />
         </div>
 
-        <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
-          <section className="glass-panel rounded-[1.75rem] p-5 sm:p-6">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="label-caps">Workflow metadata</p>
-                <h2 className="mt-2 text-xl font-bold tracking-[-0.03em] text-[var(--on-surface)]">
-                  Definition settings
-                </h2>
-              </div>
-              {!isDirty ? (
-                <div className="inline-flex items-center gap-2 rounded-full bg-emerald-500/12 px-3 py-1 text-xs font-semibold text-emerald-800 dark:text-emerald-200">
-                  <CheckCircle2 className="h-4 w-4" />
-                  Saved
-                </div>
-              ) : null}
-            </div>
-
-            <div className="mt-5 space-y-4">
-              <div>
-                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-editor-name">
-                  Workflow name
-                </label>
-                <Input
-                  id="workflow-editor-name"
-                  value={draft.metadata.name}
-                  onChange={(event) =>
-                    updateDraft((current) => ({
-                      ...current,
-                      metadata: {
-                        ...current.metadata,
-                        name: event.target.value,
-                      },
-                    }))
-                  }
-                  placeholder="Workflow name"
-                  className="input-field border-0 shadow-none"
-                />
-              </div>
-
-              <div className="grid gap-4">
-                <div>
-                  <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-editor-category">
-                    Category
-                  </label>
-                  <Input
-                    id="workflow-editor-category"
-                    value={draft.metadata.category}
-                    onChange={(event) =>
-                      updateDraft((current) => ({
-                        ...current,
-                        metadata: {
-                          ...current.metadata,
-                          category: event.target.value,
-                        },
-                      }))
-                    }
-                    placeholder="Operations"
-                    className="input-field border-0 shadow-none"
-                  />
-                </div>
-                <div>
-                  <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-editor-tags">
-                    Tags
-                  </label>
-                  <Input
-                    id="workflow-editor-tags"
-                    value={draft.metadata.tags.join(", ")}
-                    onChange={(event) =>
-                      updateDraft((current) => ({
-                        ...current,
-                        metadata: {
-                          ...current.metadata,
-                          tags: event.target.value
-                            .split(",")
-                            .map((tag) => tag.trim())
-                            .filter(Boolean),
-                        },
-                      }))
-                    }
-                    placeholder="billing, finance, approvals"
-                    className="input-field border-0 shadow-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-editor-description">
-                  Description
-                </label>
-                <textarea
-                  id="workflow-editor-description"
-                  value={draft.metadata.description}
-                  onChange={(event) =>
-                    updateDraft((current) => ({
-                      ...current,
-                      metadata: {
-                        ...current.metadata,
-                        description: event.target.value,
-                      },
-                    }))
-                  }
-                  placeholder="Describe the operational goal of this workflow"
-                  className="min-h-28 w-full rounded-[1.1rem] border border-[color:color-mix(in_srgb,var(--outline-variant)_56%,transparent)] bg-[var(--input-background)] px-4 py-3 text-sm text-[var(--on-surface)] outline-none transition focus:border-primary/40 focus:ring-4 focus:ring-primary/10"
-                />
-              </div>
-            </div>
-          </section>
-
-          <WorkflowValidationPanel
-            issues={validationIssues}
-            title="Draft validation"
-            description="This side rail keeps the latest server-side checks visible while you work directly in the canvas."
-            compact
-          />
-
-          <div className="glass-panel rounded-[1.75rem] p-5 sm:p-6">
-            <p className="label-caps">Node inspector</p>
-            <h2 className="mt-2 text-xl font-bold tracking-[-0.03em] text-[var(--on-surface)]">
-              Open node editing in a popup
-            </h2>
-            <p className="mt-3 text-sm leading-6 text-[var(--on-surface-variant)]">
-              Double-click any trigger, condition, or action node in the canvas to open the inspector and edit that node in a focused popup.
-            </p>
-          </div>
-        </section>
+        <WorkflowValidationPanel
+          issues={validationIssues}
+          title="Draft validation"
+          description="Review issues below before publishing. Double-click any node in the canvas to open the inspector."
+          compact
+        />
       </section>
 
-      {inspectorOpen && selectedNodeId ? (
-        <div
-          className="fixed inset-0 z-[145] flex items-center justify-center bg-[rgba(11,28,48,0.54)] px-4 py-8 backdrop-blur-sm"
-          role="presentation"
-          onClick={() => setInspectorOpen(false)}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="workflow-node-inspector-title"
-            className="glass-panel-strong max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-[1.85rem] p-6 shadow-[0_20px_44px_rgba(4,17,29,0.3)] sm:p-8"
-            onClick={(event) => event.stopPropagation()}
-          >
+      <GlobalModal
+        open={inspectorOpen && Boolean(selectedNodeId)}
+        onClose={() => setInspectorOpen(false)}
+        titleId="workflow-node-inspector-title"
+      >
+        <div className="flex min-h-full flex-1 items-center justify-center overflow-y-auto px-4 py-6 sm:px-6 sm:py-8">
+          <div className="glass-panel-strong max-h-[calc(100vh-2rem)] w-full max-w-4xl overflow-y-auto rounded-[1.85rem] p-6 shadow-[0_20px_44px_rgba(4,17,29,0.3)] sm:max-h-[calc(100vh-4rem)] sm:p-8">
             <div className="mb-5 flex items-start justify-between gap-4">
               <div>
                 <p className="label-caps">Node inspector</p>
@@ -705,7 +622,8 @@ export function WorkflowCanvasEditor({
                   Edit selected workflow node
                 </h2>
                 <p className="mt-2 text-sm leading-6 text-[var(--on-surface-variant)]">
-                  Update the selected trigger, condition, or action without leaving the canvas.
+                  Update the selected trigger, condition, or action without
+                  leaving the canvas.
                 </p>
               </div>
 
@@ -735,7 +653,152 @@ export function WorkflowCanvasEditor({
             />
           </div>
         </div>
-      ) : null}
+      </GlobalModal>
+
+      <GlobalModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        titleId="workflow-settings-title"
+      >
+        <div className="flex min-h-full flex-1 items-center justify-center overflow-y-auto px-4 py-6 sm:px-6 sm:py-8">
+          <div className="glass-panel-strong max-h-[calc(100vh-2rem)] w-full max-w-2xl overflow-y-auto rounded-[1.85rem] p-6 shadow-[0_20px_44px_rgba(4,17,29,0.3)] sm:max-h-[calc(100vh-4rem)] sm:p-8">
+            <div className="mb-6 flex items-start justify-between gap-4">
+              <div>
+                <p className="label-caps">Workflow metadata</p>
+                <h2
+                  id="workflow-settings-title"
+                  className="mt-2 text-2xl font-bold tracking-[-0.03em] text-[var(--on-surface)]"
+                >
+                  Definition settings
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-[var(--on-surface-variant)]">
+                  Configure the workflow name, category, tags, and description.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                {!isDirty ? (
+                  <div className="inline-flex items-center gap-2 rounded-full bg-emerald-500/12 px-3 py-1 text-xs font-semibold text-emerald-800 dark:text-emerald-200">
+                    <CheckCircle2 className="h-4 w-4" />
+                    Saved
+                  </div>
+                ) : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-xl"
+                  onClick={() => setSettingsOpen(false)}
+                >
+                  <X className="h-4 w-4" />
+                  Close
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-5">
+              <div>
+                <label
+                  className="label-caps mb-2 ml-1 block"
+                  htmlFor="workflow-settings-name"
+                >
+                  Workflow name
+                </label>
+                <Input
+                  id="workflow-settings-name"
+                  value={draft.metadata.name}
+                  onChange={(event) =>
+                    updateDraft((current) => ({
+                      ...current,
+                      metadata: {
+                        ...current.metadata,
+                        name: event.target.value,
+                      },
+                    }))
+                  }
+                  placeholder="Workflow name"
+                  className="input-field border-0 shadow-none"
+                />
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label
+                    className="label-caps mb-2 ml-1 block"
+                    htmlFor="workflow-settings-category"
+                  >
+                    Category
+                  </label>
+                  <Input
+                    id="workflow-settings-category"
+                    value={draft.metadata.category}
+                    onChange={(event) =>
+                      updateDraft((current) => ({
+                        ...current,
+                        metadata: {
+                          ...current.metadata,
+                          category: event.target.value,
+                        },
+                      }))
+                    }
+                    placeholder="Operations"
+                    className="input-field border-0 shadow-none"
+                  />
+                </div>
+                <div>
+                  <label
+                    className="label-caps mb-2 ml-1 block"
+                    htmlFor="workflow-settings-tags"
+                  >
+                    Tags
+                  </label>
+                  <Input
+                    id="workflow-settings-tags"
+                    value={draft.metadata.tags.join(", ")}
+                    onChange={(event) =>
+                      updateDraft((current) => ({
+                        ...current,
+                        metadata: {
+                          ...current.metadata,
+                          tags: event.target.value
+                            .split(",")
+                            .map((tag) => tag.trim())
+                            .filter(Boolean),
+                        },
+                      }))
+                    }
+                    placeholder="billing, finance, approvals"
+                    className="input-field border-0 shadow-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label
+                  className="label-caps mb-2 ml-1 block"
+                  htmlFor="workflow-settings-description"
+                >
+                  Description
+                </label>
+                <textarea
+                  id="workflow-settings-description"
+                  value={draft.metadata.description}
+                  onChange={(event) =>
+                    updateDraft((current) => ({
+                      ...current,
+                      metadata: {
+                        ...current.metadata,
+                        description: event.target.value,
+                      },
+                    }))
+                  }
+                  placeholder="Describe the operational goal of this workflow"
+                  className="min-h-28 w-full rounded-[1.1rem] border border-[color:color-mix(in_srgb,var(--outline-variant)_56%,transparent)] bg-[var(--input-background)] px-4 py-3 text-sm text-[var(--on-surface)] outline-none transition focus:border-primary/40 focus:ring-4 focus:ring-primary/10"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </GlobalModal>
     </div>
   );
 }

@@ -15,13 +15,20 @@ import {
   TemplateRenderError,
 } from "@/lib/server/actions/templating";
 
+export const webhookActionDeps = {
+  fetch: (...args: Parameters<typeof fetch>) => fetch(...args),
+  getExecutionWebhookTimeoutMs,
+  createTimeoutSignal: (timeoutMs: number) => AbortSignal.timeout(timeoutMs),
+};
+
 function buildLog(
   message: string,
   data?: Record<string, unknown>,
+  level: "info" | "error" = "info",
 ): { at: string; level: "info" | "error"; message: string; data?: Record<string, unknown> } {
   return {
     at: new Date().toISOString(),
-    level: "info",
+    level,
     message,
     data,
   };
@@ -122,7 +129,7 @@ export async function executeSendWebhookAction(params: {
       return {
         classification: "fatal_failure",
         output: {},
-        logs: [buildLog("Webhook action resolved an empty destination URL.")],
+        logs: [buildLog("Webhook action resolved an empty destination URL.", undefined, "error")],
         errorCode: "missing_webhook_destination",
         errorMessage: "Webhook action resolved an empty destination URL.",
       };
@@ -132,14 +139,20 @@ export async function executeSendWebhookAction(params: {
     try {
       absoluteUrl = new URL(url);
     } catch {
-      return {
-        classification: "fatal_failure",
-        output: {},
-        logs: [buildLog("Webhook action resolved an invalid destination URL.", { url })],
-        errorCode: "invalid_webhook_destination",
-        errorMessage: "Webhook action resolved an invalid destination URL.",
-      };
-    }
+        return {
+          classification: "fatal_failure",
+          output: {},
+          logs: [
+            buildLog(
+              "Webhook action resolved an invalid destination URL.",
+              { url },
+              "error",
+            ),
+          ],
+          errorCode: "invalid_webhook_destination",
+          errorMessage: "Webhook action resolved an invalid destination URL.",
+        };
+      }
 
     const requestBody = serializeRequestBody(renderedBody);
     const requestHeaders = Object.fromEntries(
@@ -161,8 +174,10 @@ export async function executeSendWebhookAction(params: {
     ];
 
     try {
-      const signal = AbortSignal.timeout(getExecutionWebhookTimeoutMs());
-      const response = await fetch(absoluteUrl, {
+      const signal = webhookActionDeps.createTimeoutSignal(
+        webhookActionDeps.getExecutionWebhookTimeoutMs(),
+      );
+      const response = await webhookActionDeps.fetch(absoluteUrl, {
         method: normalized.config.method,
         headers: requestHeaders,
         body: requestBody || undefined,
@@ -178,6 +193,13 @@ export async function executeSendWebhookAction(params: {
       );
 
       if (!response.ok) {
+        logs.push(
+          buildLog(
+            "Outbound webhook action received a failure response.",
+            { status: response.status },
+            "error",
+          ),
+        );
         return {
           classification:
             response.status >= 500 ? "retryable_failure" : "fatal_failure",
@@ -211,6 +233,18 @@ export async function executeSendWebhookAction(params: {
         logs,
       };
     } catch (error: unknown) {
+      logs.push(
+        buildLog(
+          "Outbound webhook action failed before receiving a response.",
+          {
+            message:
+              error instanceof Error
+                ? error.message
+                : "Webhook action failed unexpectedly.",
+          },
+          "error",
+        ),
+      );
       return {
         classification: "retryable_failure",
         output: {
@@ -235,7 +269,7 @@ export async function executeSendWebhookAction(params: {
       logs: [
         buildLog("Webhook action templating failed.", {
           message: error instanceof Error ? error.message : "Unknown error",
-        }),
+        }, "error"),
       ],
       errorCode: "send_webhook_render_error",
       errorMessage:

@@ -8,6 +8,13 @@ type RouteContext = {
   params: Promise<{ path: string[] }>;
 };
 
+export const webhookRouteDeps = {
+  createRequestLogger,
+  handleRouteError,
+  ingestWebhookDelivery,
+  getWebhookMaxBodyBytes,
+};
+
 function getRequestIp(request: Request): string | null {
   const header = request.headers.get("x-forwarded-for");
   return header?.split(",")[0]?.trim() || null;
@@ -34,13 +41,13 @@ function parsePayload(
 export async function POST(req: Request, { params }: RouteContext) {
   const { path } = await params;
   const pathname = `/hooks/${path.join("/")}`;
-  const logger = createRequestLogger(req, {
+  const logger = webhookRouteDeps.createRequestLogger(req, {
     route: "hooks.catchall.post",
     path: pathname,
   });
 
   try {
-    const maxBodyBytes = getWebhookMaxBodyBytes();
+    const maxBodyBytes = webhookRouteDeps.getWebhookMaxBodyBytes();
     const declaredContentLength = Number(req.headers.get("content-length"));
     if (Number.isFinite(declaredContentLength) && declaredContentLength > maxBodyBytes) {
       logger.warn(
@@ -81,7 +88,7 @@ export async function POST(req: Request, { params }: RouteContext) {
       );
     }
 
-    const result = await ingestWebhookDelivery({
+    const result = await webhookRouteDeps.ingestWebhookDelivery({
       pathname,
       rawBody,
       payload,
@@ -119,7 +126,7 @@ export async function POST(req: Request, { params }: RouteContext) {
       { status: 202 },
     );
   } catch (error: unknown) {
-    return handleRouteError(error, {
+    return webhookRouteDeps.handleRouteError(error, {
       request: req,
       logger,
       fallbackMessage: "Failed to ingest webhook delivery",

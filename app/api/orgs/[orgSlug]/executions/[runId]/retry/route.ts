@@ -15,10 +15,20 @@ type RouteContext = {
   params: Promise<{ orgSlug: string; runId: string }>;
 };
 
+export const executionRetryRouteDeps = {
+  auth,
+  createRequestLogger,
+  handleRouteError,
+  retryWorkflowRun,
+  getApiOrgAccess,
+  canRetryRuns,
+  retryRunSchema,
+};
+
 export async function POST(req: Request, { params }: RouteContext) {
-  const session = await auth();
+  const session = await executionRetryRouteDeps.auth();
   const { orgSlug, runId } = await params;
-  const logger = createRequestLogger(req, {
+  const logger = executionRetryRouteDeps.createRequestLogger(req, {
     route: "api.orgs.executions.run.retry.post",
     organizationSlug: orgSlug,
     runId,
@@ -27,12 +37,13 @@ export async function POST(req: Request, { params }: RouteContext) {
 
   let body: unknown = {};
   try {
-    body = await req.json();
+    const rawBody = await req.text();
+    body = rawBody.trim() ? JSON.parse(rawBody) : {};
   } catch {
-    body = {};
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const parsed = retryRunSchema.safeParse(body);
+  const parsed = executionRetryRouteDeps.retryRunSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
       { error: parsed.error.issues[0]?.message ?? "Invalid retry payload" },
@@ -41,7 +52,7 @@ export async function POST(req: Request, { params }: RouteContext) {
   }
 
   try {
-    const access = await getApiOrgAccess({
+    const access = await executionRetryRouteDeps.getApiOrgAccess({
       orgSlug,
       userId: session?.user?.id,
     });
@@ -49,11 +60,11 @@ export async function POST(req: Request, { params }: RouteContext) {
     if (!access.ok) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
-    if (!canRetryRuns(access.context.membership.role)) {
+    if (!executionRetryRouteDeps.canRetryRuns(access.context.membership.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const result = await retryWorkflowRun({
+    const result = await executionRetryRouteDeps.retryWorkflowRun({
       organizationId: access.context.organization.id,
       runId,
       actorUserId: access.context.userId,
@@ -70,7 +81,7 @@ export async function POST(req: Request, { params }: RouteContext) {
       return NextResponse.json({ error: error.message }, { status: 409 });
     }
 
-    return handleRouteError(error, {
+    return executionRetryRouteDeps.handleRouteError(error, {
       request: req,
       logger,
       fallbackMessage: "Failed to retry execution",

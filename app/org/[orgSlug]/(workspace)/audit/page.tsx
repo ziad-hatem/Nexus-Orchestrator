@@ -1,6 +1,7 @@
 
 import { AuditStoreHydrator } from "@/app/components/audit/audit-store-hydrator";
 import { AuditLogTable } from "@/app/components/audit/audit-log-table";
+import { OrgRealtimeRefresh } from "@/app/components/realtime/org-realtime-refresh";
 import { listAuditLogs } from "@/lib/server/audit-log";
 import { requirePageOrgAccess } from "@/lib/server/org-access";
 import { canViewAuditLogs } from "@/lib/server/permissions";
@@ -43,6 +44,7 @@ export default async function AuditPage({
 
   return (
     <>
+      <OrgRealtimeRefresh orgSlug={orgSlug} channel="audit" />
       <AuditStoreHydrator
         logs={logs}
         total={total}

@@ -4,6 +4,11 @@ import {
   type MonitoringContext,
 } from "@/lib/observability/error-tracking";
 
+export const alertsDeps = {
+  getOptionalEnv,
+  captureServerMessage,
+};
+
 export const OPERATIONAL_ALERT_KEYS = [
   "queue_backlog",
   "stale_runs",
@@ -41,35 +46,35 @@ function parsePositiveInteger(value: string | null, fallback: number): number {
 
 export function getOperationsQueueBacklogAlertThreshold(): number {
   return parsePositiveInteger(
-    getOptionalEnv("OPERATIONS_QUEUE_BACKLOG_ALERT_THRESHOLD"),
+    alertsDeps.getOptionalEnv("OPERATIONS_QUEUE_BACKLOG_ALERT_THRESHOLD"),
     50,
   );
 }
 
 export function getOperationsStaleRunAlertSeconds(): number {
   return parsePositiveInteger(
-    getOptionalEnv("OPERATIONS_STALE_RUN_ALERT_SECONDS"),
+    alertsDeps.getOptionalEnv("OPERATIONS_STALE_RUN_ALERT_SECONDS"),
     300,
   );
 }
 
 export function getOperationsWebhookRejectionSpikeThreshold(): number {
   return parsePositiveInteger(
-    getOptionalEnv("OPERATIONS_WEBHOOK_REJECTION_SPIKE_THRESHOLD"),
+    alertsDeps.getOptionalEnv("OPERATIONS_WEBHOOK_REJECTION_SPIKE_THRESHOLD"),
     10,
   );
 }
 
 export function getOperationsRetryExhaustionAlertThreshold(): number {
   return parsePositiveInteger(
-    getOptionalEnv("OPERATIONS_RETRY_EXHAUSTION_ALERT_THRESHOLD"),
+    alertsDeps.getOptionalEnv("OPERATIONS_RETRY_EXHAUSTION_ALERT_THRESHOLD"),
     5,
   );
 }
 
 export function getOperationsAlertLookbackMinutes(): number {
   return parsePositiveInteger(
-    getOptionalEnv("OPERATIONS_ALERT_LOOKBACK_MINUTES"),
+    alertsDeps.getOptionalEnv("OPERATIONS_ALERT_LOOKBACK_MINUTES"),
     60,
   );
 }
@@ -156,7 +161,7 @@ export function emitOperationalAlert(params: {
     return null;
   }
 
-  return captureServerMessage(params.alert.message, {
+  return alertsDeps.captureServerMessage(params.alert.message, {
     context: {
       ...params.context,
       alertKey: params.alert.key,

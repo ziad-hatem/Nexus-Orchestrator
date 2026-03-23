@@ -12,13 +12,22 @@ import {
   TemplateRenderError,
 } from "@/lib/server/actions/templating";
 
+export const emailActionDeps = {
+  createResendClient: (apiKey: string) => new Resend(apiKey),
+  getRequiredEnv,
+  getFromAddress: () =>
+    process.env.RESEND_FROM_EMAIL ??
+    "Nexus Orchestrator <onboarding@resend.dev>",
+};
+
 function buildLog(
   message: string,
   data?: Record<string, unknown>,
+  level: "info" | "error" = "info",
 ): { at: string; level: "info" | "error"; message: string; data?: Record<string, unknown> } {
   return {
     at: new Date().toISOString(),
-    level: "info",
+    level,
     message,
     data,
   };
@@ -26,15 +35,25 @@ function buildLog(
 
 function shouldRetryResendError(error: unknown): boolean {
   const message =
-    error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+    error instanceof Error
+      ? error.message.toLowerCase()
+      : typeof error === "object" &&
+          error !== null &&
+          "message" in error &&
+          typeof error.message === "string"
+        ? error.message.toLowerCase()
+        : String(error).toLowerCase();
 
   return (
+    /\b5\d{2}\b/.test(message) ||
+    message.includes("408") ||
+    message.includes("429") ||
     message.includes("timeout") ||
     message.includes("network") ||
     message.includes("temporar") ||
     message.includes("unavailable") ||
     message.includes("rate limit") ||
-    message.includes("5")
+    message.includes("too many requests")
   );
 }
 
@@ -100,7 +119,7 @@ export async function executeSendEmailAction(params: {
       return {
         classification: "fatal_failure",
         output: {},
-        logs: [buildLog("Email action resolved an invalid recipient.", { to })],
+        logs: [buildLog("Email action resolved an invalid recipient.", { to }, "error")],
         errorCode: "invalid_email_recipient",
         errorMessage: "Email action resolved an invalid recipient address.",
       };
@@ -110,7 +129,7 @@ export async function executeSendEmailAction(params: {
       return {
         classification: "fatal_failure",
         output: {},
-        logs: [buildLog("Email action resolved an empty subject.")],
+        logs: [buildLog("Email action resolved an empty subject.", undefined, "error")],
         errorCode: "missing_email_subject",
         errorMessage: "Email action resolved an empty subject.",
       };
@@ -120,7 +139,7 @@ export async function executeSendEmailAction(params: {
       return {
         classification: "fatal_failure",
         output: {},
-        logs: [buildLog("Email action resolved an empty body.")],
+        logs: [buildLog("Email action resolved an empty body.", undefined, "error")],
         errorCode: "missing_email_body",
         errorMessage: "Email action resolved an empty body.",
       };
@@ -130,15 +149,22 @@ export async function executeSendEmailAction(params: {
       return {
         classification: "fatal_failure",
         output: {},
-        logs: [buildLog("Email action resolved an invalid reply-to address.", { replyTo })],
+        logs: [
+          buildLog(
+            "Email action resolved an invalid reply-to address.",
+            { replyTo },
+            "error",
+          ),
+        ],
         errorCode: "invalid_email_reply_to",
         errorMessage: "Email action resolved an invalid reply-to address.",
       };
     }
 
-    const resend = new Resend(getRequiredEnv("RESEND_API_KEY"));
-    const fromAddress =
-      process.env.RESEND_FROM_EMAIL ?? "Nexus Orchestrator <onboarding@resend.dev>";
+    const resend = emailActionDeps.createResendClient(
+      emailActionDeps.getRequiredEnv("RESEND_API_KEY"),
+    );
+    const fromAddress = emailActionDeps.getFromAddress();
 
     const logs = [
       buildLog("Sending email action through Resend.", {
@@ -159,6 +185,13 @@ export async function executeSendEmailAction(params: {
       if (response.error) {
         const failureMessage =
           response.error.message ?? "Resend rejected the email action.";
+        logs.push(
+          buildLog(
+            "Email action provider rejected the request.",
+            { message: failureMessage },
+            "error",
+          ),
+        );
         return {
           classification: shouldRetryResendError(response.error)
             ? "retryable_failure"
@@ -188,6 +221,18 @@ export async function executeSendEmailAction(params: {
         logs,
       };
     } catch (error: unknown) {
+      logs.push(
+        buildLog(
+          "Email action provider raised an exception.",
+          {
+            message:
+              error instanceof Error
+                ? error.message
+                : "Email action failed unexpectedly.",
+          },
+          "error",
+        ),
+      );
       return {
         classification: shouldRetryResendError(error)
           ? "retryable_failure"
@@ -214,7 +259,7 @@ export async function executeSendEmailAction(params: {
       logs: [
         buildLog("Email action templating failed.", {
           message: error instanceof Error ? error.message : "Unknown error",
-        }),
+        }, "error"),
       ],
       errorCode: "send_email_render_error",
       errorMessage:

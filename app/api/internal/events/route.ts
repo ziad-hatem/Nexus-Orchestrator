@@ -9,6 +9,14 @@ import {
   WorkflowTriggerRateLimitError,
 } from "@/lib/server/triggers/service";
 
+export const internalEventsRouteDeps = {
+  createRequestLogger,
+  handleRouteError,
+  getRequiredEnv,
+  internalEventIngestionSchema,
+  ingestInternalEvent,
+};
+
 function getBearerToken(request: Request): string | null {
   const header = request.headers.get("authorization");
   if (!header?.startsWith("Bearer ")) {
@@ -19,16 +27,16 @@ function getBearerToken(request: Request): string | null {
 }
 
 export async function POST(req: Request) {
-  const logger = createRequestLogger(req, {
+  const logger = internalEventsRouteDeps.createRequestLogger(req, {
     route: "api.internal.events.post",
   });
 
   const token = getBearerToken(req);
   let expectedSecret: string;
   try {
-    expectedSecret = getRequiredEnv("INTERNAL_EVENTS_SECRET");
+    expectedSecret = internalEventsRouteDeps.getRequiredEnv("INTERNAL_EVENTS_SECRET");
   } catch (error: unknown) {
-    return handleRouteError(error, {
+    return internalEventsRouteDeps.handleRouteError(error, {
       request: req,
       logger,
       fallbackMessage: "Internal events secret is not configured",
@@ -46,7 +54,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const parsed = internalEventIngestionSchema.safeParse(body);
+  const parsed = internalEventsRouteDeps.internalEventIngestionSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
       {
@@ -58,7 +66,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const result = await ingestInternalEvent(parsed.data);
+    const result = await internalEventsRouteDeps.ingestInternalEvent(parsed.data);
     return NextResponse.json(result, { status: 202 });
   } catch (error: unknown) {
     if (error instanceof WorkflowTriggerRateLimitError) {
@@ -68,7 +76,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: error.message }, { status: 202 });
     }
 
-    return handleRouteError(error, {
+    return internalEventsRouteDeps.handleRouteError(error, {
       request: req,
       logger,
       fallbackMessage: "Failed to ingest internal event",

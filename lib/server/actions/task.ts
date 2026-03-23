@@ -14,13 +14,19 @@ import {
   TemplateRenderError,
 } from "@/lib/server/actions/templating";
 
+export const taskActionDeps = {
+  resolveActiveAssigneeByEmail,
+  createWorkflowTaskRow,
+};
+
 function buildLog(
   message: string,
   data?: Record<string, unknown>,
+  level: "info" | "error" = "info",
 ): { at: string; level: "info" | "error"; message: string; data?: Record<string, unknown> } {
   return {
     at: new Date().toISOString(),
-    level: "info",
+    level,
     message,
     data,
   };
@@ -96,7 +102,7 @@ export async function executeCreateTaskAction(params: {
       return {
         classification: "fatal_failure",
         output: {},
-        logs: [buildLog("Task action resolved an empty title.")],
+        logs: [buildLog("Task action resolved an empty title.", undefined, "error")],
         errorCode: "missing_task_title",
         errorMessage: "Task action resolved an empty title.",
       };
@@ -109,7 +115,13 @@ export async function executeCreateTaskAction(params: {
         return {
           classification: "fatal_failure",
           output: {},
-          logs: [buildLog("Task action resolved an invalid due date.", { dueAt })],
+          logs: [
+            buildLog(
+              "Task action resolved an invalid due date.",
+              { dueAt },
+              "error",
+            ),
+          ],
           errorCode: "invalid_task_due_at",
           errorMessage: "Task action resolved an invalid due date.",
         };
@@ -125,13 +137,19 @@ export async function executeCreateTaskAction(params: {
         return {
           classification: "fatal_failure",
           output: {},
-          logs: [buildLog("Task action resolved an invalid assignee email.", { assigneeEmail })],
+          logs: [
+            buildLog(
+              "Task action resolved an invalid assignee email.",
+              { assigneeEmail },
+              "error",
+            ),
+          ],
           errorCode: "invalid_task_assignee",
           errorMessage: "Task action resolved an invalid assignee email.",
         };
       }
 
-      const assignee = await resolveActiveAssigneeByEmail({
+      const assignee = await taskActionDeps.resolveActiveAssigneeByEmail({
         organizationId: params.context.organizationId,
         email: normalizedAssignee,
       });
@@ -142,7 +160,7 @@ export async function executeCreateTaskAction(params: {
           logs: [
             buildLog("Task action assignee was not found in the active organization.", {
               assigneeEmail: normalizedAssignee,
-            }),
+            }, "error"),
           ],
           errorCode: "task_assignee_not_found",
           errorMessage:
@@ -154,7 +172,7 @@ export async function executeCreateTaskAction(params: {
       assigneeAddress = assignee.email;
     }
 
-    const task = await createWorkflowTaskRow({
+    const task = await taskActionDeps.createWorkflowTaskRow({
       organizationId: params.context.organizationId,
       workflowId: params.context.workflowId,
       workflowVersionId: params.context.workflowVersionId,
@@ -191,7 +209,7 @@ export async function executeCreateTaskAction(params: {
       logs: [
         buildLog("Task action failed.", {
           message: error instanceof Error ? error.message : "Unknown error",
-        }),
+        }, "error"),
       ],
       errorCode:
         error instanceof TemplateRenderError

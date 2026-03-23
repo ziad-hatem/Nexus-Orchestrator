@@ -1,5 +1,6 @@
 import { OperationsDashboard } from "@/app/components/operations/operations-dashboard";
 import { OperationsStoreHydrator } from "@/app/components/operations/operations-store-hydrator";
+import { OrgRealtimeRefresh } from "@/app/components/realtime/org-realtime-refresh";
 import { requirePageOrgAccess } from "@/lib/server/org-access";
 import { getOperationsDashboardData } from "@/lib/server/operations/service";
 import { canViewOperations } from "@/lib/server/permissions";
@@ -25,6 +26,7 @@ export default async function OperationsPage({
 
   return (
     <>
+      <OrgRealtimeRefresh orgSlug={orgSlug} channel="operations" />
       <OperationsStoreHydrator snapshot={data} />
       <OperationsDashboard orgSlug={orgSlug} data={data} />
     </>

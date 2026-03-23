@@ -1,5 +1,3 @@
-import "server-only";
-
 import { writeAuditLog } from "@/lib/server/audit-log";
 import {
   deactivateWorkflowTriggerBindings,
@@ -51,6 +49,30 @@ import {
   type WorkflowVersionRow,
 } from "@/lib/server/workflows/repository";
 
+export const workflowServiceDeps = {
+  writeAuditLog,
+  materializePublishedTriggerBinding,
+  deactivateWorkflowTriggerBindings,
+  deleteTriggerBindingRow,
+  createWorkflowDraftRow,
+  createWorkflowRow,
+  createWorkflowVersionRow,
+  deleteWorkflowDraftRowByWorkflowDbId,
+  deleteWorkflowRow,
+  deleteWorkflowVersionRow,
+  getWorkflowDraftRowByWorkflowDbId,
+  getWorkflowRowByPublicId,
+  getWorkflowVersionRow,
+  isDuplicateConstraintError,
+  listWorkflowActorsByIds,
+  listWorkflowDraftRowsForOrganization,
+  listWorkflowRowsForOrganization,
+  listWorkflowVersionRowsByWorkflowDbId,
+  updateWorkflowDraftRow,
+  updateWorkflowRow,
+  workflowPublicIdExists,
+};
+
 export class WorkflowNotFoundError extends Error {
   constructor() {
     super("Workflow not found");
@@ -100,7 +122,7 @@ function mapActors(rows: WorkflowActorRow[]): Map<string, WorkflowActor> {
 }
 
 async function getActorMap(userIds: string[]): Promise<Map<string, WorkflowActor>> {
-  return mapActors(await listWorkflowActorsByIds(userIds));
+  return mapActors(await workflowServiceDeps.listWorkflowActorsByIds(userIds));
 }
 
 function workflowMatchesQuery(
@@ -199,7 +221,7 @@ async function loadWorkflowOrThrow(params: {
   organizationId: string;
   workflowId: string;
 }): Promise<WorkflowRow> {
-  const workflow = await getWorkflowRowByPublicId(params);
+  const workflow = await workflowServiceDeps.getWorkflowRowByPublicId(params);
   if (!workflow) {
     throw new WorkflowNotFoundError();
   }
@@ -212,7 +234,7 @@ async function reserveWorkflowPublicId(
 ): Promise<string> {
   for (let attempt = 0; attempt < 25; attempt += 1) {
     const workflowId = createWorkflowPublicId();
-    const exists = await workflowPublicIdExists({
+    const exists = await workflowServiceDeps.workflowPublicIdExists({
       organizationId,
       workflowId,
     });
@@ -240,7 +262,7 @@ async function createUniqueWorkflowRow(params: {
     const slug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`;
 
     try {
-      return await createWorkflowRow({
+      return await workflowServiceDeps.createWorkflowRow({
         organizationId: params.organizationId,
         workflowId: params.workflowId,
         slug,
@@ -253,7 +275,7 @@ async function createUniqueWorkflowRow(params: {
       });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unknown error";
-      if (!isDuplicateConstraintError(message)) {
+      if (!workflowServiceDeps.isDuplicateConstraintError(message)) {
         throw error;
       }
     }
@@ -273,8 +295,10 @@ export async function listWorkflows(params: {
   pageSize: number;
 }> {
   const [workflowRows, draftRows] = await Promise.all([
-    listWorkflowRowsForOrganization(params.organizationId),
-    listWorkflowDraftRowsForOrganization(params.organizationId),
+    workflowServiceDeps.listWorkflowRowsForOrganization(params.organizationId),
+    workflowServiceDeps.listWorkflowDraftRowsForOrganization(
+      params.organizationId,
+    ),
   ]);
 
   const draftWorkflowIds = new Set(draftRows.map((draft) => draft.workflow_id));
@@ -357,7 +381,7 @@ export async function createWorkflow(params: {
   });
 
   try {
-    const draftRow = await createWorkflowDraftRow({
+    const draftRow = await workflowServiceDeps.createWorkflowDraftRow({
       workflowDbId: workflow.id,
       organizationId: params.organizationId,
       metadata: draft.metadata,
@@ -367,7 +391,7 @@ export async function createWorkflow(params: {
       userId: params.userId,
     });
 
-    await writeAuditLog({
+    await workflowServiceDeps.writeAuditLog({
       organizationId: params.organizationId,
       actorUserId: params.userId,
       action: "workflow.created",
@@ -388,7 +412,9 @@ export async function createWorkflow(params: {
       actors,
     });
   } catch (error) {
-    await deleteWorkflowRow(workflow.id).catch(() => undefined);
+    await workflowServiceDeps.deleteWorkflowRow(workflow.id).catch(
+      () => undefined,
+    );
     throw error;
   }
 }
@@ -399,8 +425,8 @@ export async function getWorkflowDetail(params: {
 }): Promise<WorkflowDetail> {
   const workflow = await loadWorkflowOrThrow(params);
   const [draft, versionRows] = await Promise.all([
-    getWorkflowDraftRowByWorkflowDbId(workflow.id),
-    listWorkflowVersionRowsByWorkflowDbId(workflow.id),
+    workflowServiceDeps.getWorkflowDraftRowByWorkflowDbId(workflow.id),
+    workflowServiceDeps.listWorkflowVersionRowsByWorkflowDbId(workflow.id),
   ]);
 
   const latestVersion =
@@ -456,7 +482,9 @@ export async function getOrCreateWorkflowDraft(params: {
     );
   }
 
-  const existingDraft = await getWorkflowDraftRowByWorkflowDbId(workflow.id);
+  const existingDraft = await workflowServiceDeps.getWorkflowDraftRowByWorkflowDbId(
+    workflow.id,
+  );
   if (existingDraft) {
     const actors = await getActorMap([existingDraft.updated_by]);
     return mapDraftState({
@@ -470,7 +498,7 @@ export async function getOrCreateWorkflowDraft(params: {
   const latestVersion =
     latestVersionNumber === null
       ? null
-      : await getWorkflowVersionRow({
+      : await workflowServiceDeps.getWorkflowVersionRow({
           workflowDbId: workflow.id,
           versionNumber: latestVersionNumber,
         });
@@ -489,21 +517,73 @@ export async function getOrCreateWorkflowDraft(params: {
       });
 
   const validationIssues = validateWorkflowDraftDocument(nextDraftDocument);
-  const draft = await createWorkflowDraftRow({
-    workflowDbId: workflow.id,
-    organizationId: params.organizationId,
-    metadata: nextDraftDocument.metadata,
-    config: nextDraftDocument.config,
-    canvas: nextDraftDocument.canvas,
-    validationIssues,
-    userId: params.userId,
-  });
+  let draft: WorkflowDraftRow;
+  try {
+    draft = await workflowServiceDeps.createWorkflowDraftRow({
+      workflowDbId: workflow.id,
+      organizationId: params.organizationId,
+      metadata: nextDraftDocument.metadata,
+      config: nextDraftDocument.config,
+      canvas: nextDraftDocument.canvas,
+      validationIssues,
+      userId: params.userId,
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    if (!workflowServiceDeps.isDuplicateConstraintError(message)) {
+      throw error;
+    }
+
+    const currentWorkflow = await loadWorkflowOrThrow({
+      organizationId: params.organizationId,
+      workflowId: params.workflowId,
+    });
+    if (currentWorkflow.status === "archived") {
+      throw new WorkflowConflictError(
+        "Archived workflows cannot be edited. Unarchive is not available in this phase.",
+      );
+    }
+
+    const concurrentDraft =
+      await workflowServiceDeps.getWorkflowDraftRowByWorkflowDbId(workflow.id);
+    if (!concurrentDraft) {
+      throw error;
+    }
+
+    const concurrentStatus =
+      currentWorkflow.latest_published_version_number === null
+        ? "draft_only"
+        : "published_with_draft";
+    if (currentWorkflow.status === "published") {
+      await workflowServiceDeps.updateWorkflowRow({
+        workflowDbId: workflow.id,
+        patch: {
+          status: concurrentStatus,
+          updated_by: params.userId,
+        },
+      });
+    }
+
+    const actors = await getActorMap([concurrentDraft.updated_by]);
+    return mapDraftState({
+      workflow: {
+        ...currentWorkflow,
+        status:
+          currentWorkflow.status === "published"
+            ? concurrentStatus
+            : currentWorkflow.status,
+        updated_by: params.userId,
+      },
+      draft: concurrentDraft,
+      actors,
+    });
+  }
 
   const nextStatus =
     workflow.latest_published_version_number === null
       ? "draft_only"
       : "published_with_draft";
-  await updateWorkflowRow({
+  await workflowServiceDeps.updateWorkflowRow({
     workflowDbId: workflow.id,
     patch: {
       status: nextStatus,
@@ -566,7 +646,7 @@ export async function updateWorkflowDraft(params: {
   });
   const validationIssues = validateWorkflowDraftDocument(nextDraft);
 
-  const updatedDraftRow = await updateWorkflowDraftRow({
+  const updatedDraftRow = await workflowServiceDeps.updateWorkflowDraftRow({
     draftId: current.draftId,
     metadata: nextDraft.metadata,
     config: nextDraft.config,
@@ -588,12 +668,12 @@ export async function updateWorkflowDraft(params: {
     workflowPatch.status = "published_with_draft";
   }
 
-  await updateWorkflowRow({
+  await workflowServiceDeps.updateWorkflowRow({
     workflowDbId: workflow.id,
     patch: workflowPatch,
   });
 
-  await writeAuditLog({
+  await workflowServiceDeps.writeAuditLog({
     organizationId: params.organizationId,
     actorUserId: params.userId,
     action: "workflow.draft_updated",
@@ -604,8 +684,8 @@ export async function updateWorkflowDraft(params: {
       workflowStatusBefore: workflow.status,
       workflowStatusAfter:
         workflow.status === "published"
-          ? "published_with_draft"
-          : workflow.status,
+      ? "published_with_draft"
+      : workflow.status,
       validationIssueCount: validationIssues.length,
     },
     request: params.request,
@@ -656,7 +736,9 @@ export async function publishWorkflow(params: {
     throw new WorkflowConflictError("Archived workflows cannot be published.");
   }
 
-  const draft = await getWorkflowDraftRowByWorkflowDbId(workflow.id);
+  const draft = await workflowServiceDeps.getWorkflowDraftRowByWorkflowDbId(
+    workflow.id,
+  );
   if (!draft) {
     throw new WorkflowConflictError(
       "Create or load a draft before publishing a workflow.",
@@ -674,17 +756,29 @@ export async function publishWorkflow(params: {
   }
 
   const nextVersionNumber = (workflow.latest_published_version_number ?? 0) + 1;
-  const version = await createWorkflowVersionRow({
-    workflowDbId: workflow.id,
-    organizationId: params.organizationId,
-    versionNumber: nextVersionNumber,
-    metadata: draftDocument.metadata,
-    config: draftDocument.config,
-    canvas: draftDocument.canvas,
-    validationIssues,
-    notes: params.notes?.trim() || null,
-    userId: params.userId,
-  });
+  let version: WorkflowVersionRow;
+  try {
+    version = await workflowServiceDeps.createWorkflowVersionRow({
+      workflowDbId: workflow.id,
+      organizationId: params.organizationId,
+      versionNumber: nextVersionNumber,
+      metadata: draftDocument.metadata,
+      config: draftDocument.config,
+      canvas: draftDocument.canvas,
+      validationIssues,
+      notes: params.notes?.trim() || null,
+      userId: params.userId,
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    if (workflowServiceDeps.isDuplicateConstraintError(message)) {
+      throw new WorkflowConflictError(
+        "Another publish completed first. Refresh the workflow and review the latest version.",
+      );
+    }
+
+    throw error;
+  }
   let createdBindingId: string | null = null;
 
   try {
@@ -694,17 +788,19 @@ export async function publishWorkflow(params: {
       );
     }
 
-    const binding = await materializePublishedTriggerBinding({
-      organizationId: params.organizationId,
-      workflow,
-      version,
-      trigger: draftDocument.config.trigger,
-      userId: params.userId,
-      request: params.request,
-    });
+    const binding = await workflowServiceDeps.materializePublishedTriggerBinding(
+      {
+        organizationId: params.organizationId,
+        workflow,
+        version,
+        trigger: draftDocument.config.trigger,
+        userId: params.userId,
+        request: params.request,
+      },
+    );
     createdBindingId = binding.binding.id;
 
-    await updateWorkflowRow({
+    await workflowServiceDeps.updateWorkflowRow({
       workflowDbId: workflow.id,
       patch: {
         name: draftDocument.metadata.name,
@@ -716,19 +812,21 @@ export async function publishWorkflow(params: {
         updated_by: params.userId,
       },
     });
-    await deleteWorkflowDraftRowByWorkflowDbId(workflow.id);
+    await workflowServiceDeps.deleteWorkflowDraftRowByWorkflowDbId(workflow.id);
   } catch (error) {
     if (createdBindingId) {
-      await deleteTriggerBindingRow(createdBindingId).catch(() => undefined);
+      await workflowServiceDeps.deleteTriggerBindingRow(createdBindingId).catch(
+        () => undefined,
+      );
     }
-    await deleteWorkflowVersionRow({
+    await workflowServiceDeps.deleteWorkflowVersionRow({
       workflowDbId: workflow.id,
       versionNumber: nextVersionNumber,
     }).catch(() => undefined);
     throw error;
   }
 
-  await writeAuditLog({
+  await workflowServiceDeps.writeAuditLog({
     organizationId: params.organizationId,
     actorUserId: params.userId,
     action: "workflow.published",
@@ -765,7 +863,7 @@ export async function archiveWorkflow(params: {
     throw new WorkflowConflictError("Workflow is already archived.");
   }
 
-  await updateWorkflowRow({
+  await workflowServiceDeps.updateWorkflowRow({
     workflowDbId: workflow.id,
     patch: {
       status: "archived",
@@ -774,12 +872,15 @@ export async function archiveWorkflow(params: {
       updated_by: params.userId,
     },
   });
-  await deactivateWorkflowTriggerBindings({
+  await workflowServiceDeps.deactivateWorkflowTriggerBindings({
     workflowDbId: workflow.id,
     userId: params.userId,
   });
+  await workflowServiceDeps.deleteWorkflowDraftRowByWorkflowDbId(
+    workflow.id,
+  ).catch(() => undefined);
 
-  await writeAuditLog({
+  await workflowServiceDeps.writeAuditLog({
     organizationId: params.organizationId,
     actorUserId: params.userId,
     action: "workflow.archived",
@@ -804,7 +905,9 @@ export async function listWorkflowVersions(params: {
   workflowId: string;
 }): Promise<WorkflowVersionSummary[]> {
   const workflow = await loadWorkflowOrThrow(params);
-  const versions = await listWorkflowVersionRowsByWorkflowDbId(workflow.id);
+  const versions = await workflowServiceDeps.listWorkflowVersionRowsByWorkflowDbId(
+    workflow.id,
+  );
   const actors = await getActorMap(versions.map((version) => version.published_by));
 
   return versions.map((version) => ({
@@ -829,7 +932,7 @@ export async function getWorkflowVersionSnapshot(params: {
     organizationId: params.organizationId,
     workflowId: params.workflowId,
   });
-  const version = await getWorkflowVersionRow({
+  const version = await workflowServiceDeps.getWorkflowVersionRow({
     workflowDbId: workflow.id,
     versionNumber: params.versionNumber,
   });

@@ -15,10 +15,20 @@ type RouteContext = {
   params: Promise<{ orgSlug: string; workflowId: string }>;
 };
 
+export const workflowArchiveRouteDeps = {
+  auth,
+  createRequestLogger,
+  handleRouteError,
+  getApiOrgAccess,
+  canArchiveWorkflows,
+  archiveWorkflowSchema,
+  archiveWorkflow,
+};
+
 export async function POST(req: Request, { params }: RouteContext) {
-  const session = await auth();
+  const session = await workflowArchiveRouteDeps.auth();
   const { orgSlug, workflowId } = await params;
-  const logger = createRequestLogger(req, {
+  const logger = workflowArchiveRouteDeps.createRequestLogger(req, {
     route: "api.orgs.workflows.archive.post",
     organizationSlug: orgSlug,
     workflowId,
@@ -32,7 +42,7 @@ export async function POST(req: Request, { params }: RouteContext) {
     body = {};
   }
 
-  const parsed = archiveWorkflowSchema.safeParse(body);
+  const parsed = workflowArchiveRouteDeps.archiveWorkflowSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
       { error: parsed.error.issues[0]?.message ?? "Invalid archive payload" },
@@ -41,7 +51,7 @@ export async function POST(req: Request, { params }: RouteContext) {
   }
 
   try {
-    const access = await getApiOrgAccess({
+    const access = await workflowArchiveRouteDeps.getApiOrgAccess({
       orgSlug,
       userId: session?.user?.id,
     });
@@ -49,11 +59,11 @@ export async function POST(req: Request, { params }: RouteContext) {
     if (!access.ok) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
-    if (!canArchiveWorkflows(access.context.membership.role)) {
+    if (!workflowArchiveRouteDeps.canArchiveWorkflows(access.context.membership.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const detail = await archiveWorkflow({
+    const detail = await workflowArchiveRouteDeps.archiveWorkflow({
       organizationId: access.context.organization.id,
       workflowId,
       userId: access.context.userId,
@@ -71,7 +81,7 @@ export async function POST(req: Request, { params }: RouteContext) {
         : error instanceof WorkflowConflictError
           ? 409
           : 500;
-    return handleRouteError(error, {
+    return workflowArchiveRouteDeps.handleRouteError(error, {
       request: req,
       logger,
       fallbackMessage: "Failed to archive workflow",

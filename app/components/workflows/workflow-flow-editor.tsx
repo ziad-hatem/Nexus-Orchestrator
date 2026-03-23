@@ -1,8 +1,14 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import type { DragEvent } from "react";
-import { GitBranch, RadioTower, Sparkles, Workflow } from "lucide-react";
+import { useState, type DragEvent } from "react";
+import {
+  ChevronRight,
+  GitBranch,
+  RadioTower,
+  Sparkles,
+  Workflow,
+} from "lucide-react";
 import type {
   WorkflowCanvas,
   WorkflowCanvasNode,
@@ -21,7 +27,10 @@ type WorkflowFlowEditorProps = {
     nodeType: WorkflowNodeType,
     position?: WorkflowCanvasNode["position"],
   ) => string | null;
+  onDeleteNode: (nodeId: string) => void;
 };
+
+type WorkflowReactFlowCanvasProps = Omit<WorkflowFlowEditorProps, "hasTrigger">;
 
 const WorkflowReactFlowCanvas = dynamic(
   () =>
@@ -31,7 +40,7 @@ const WorkflowReactFlowCanvas = dynamic(
   {
     ssr: false,
     loading: () => (
-      <section className="glass-panel flex min-h-[48rem] items-center justify-center rounded-[1.75rem] xl:min-h-0">
+      <section className="glass-panel flex h-[48rem] min-h-[48rem] items-center justify-center rounded-[1.75rem] xl:h-[calc(100vh-15rem)] xl:min-h-[62rem]">
         <div className="max-w-sm rounded-[1.5rem] bg-[var(--surface-container-low)] px-6 py-5 text-center">
           <p className="label-caps">Canvas</p>
           <p className="mt-3 text-sm leading-6 text-[var(--on-surface-variant)]">
@@ -104,7 +113,9 @@ function NodePaletteCard({
           <Icon className="h-5 w-5" />
         </div>
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-[var(--on-surface)]">{title}</p>
+          <p className="text-sm font-semibold text-[var(--on-surface)]">
+            {title}
+          </p>
           <p className="mt-2 text-xs leading-5 text-[var(--on-surface-variant)]">
             {description}
           </p>
@@ -122,20 +133,98 @@ export function WorkflowFlowEditor({
   onOpenInspector,
   onCanvasChange,
   onCreateNode,
+  onDeleteNode,
 }: WorkflowFlowEditorProps) {
+  const [paletteOpen, setPaletteOpen] = useState(false);
+
   return (
-    <section className="grid gap-4 xl:h-full xl:min-h-0 xl:grid-cols-[16rem_minmax(0,1fr)]">
-      <aside className="glass-panel rounded-[1.75rem] p-5 sm:p-6 xl:overflow-y-auto">
+    <section className="relative xl:h-full xl:min-h-0">
+      {/* ── Collapsible palette overlay ── */}
+      <div
+        className={cn(
+          "absolute left-0 top-0 z-30 hidden h-full w-[17rem] transition-transform duration-300 ease-in-out xl:block",
+          paletteOpen ? "translate-x-0" : "-translate-x-[13.75rem]",
+        )}
+        onMouseEnter={() => setPaletteOpen(true)}
+        onMouseLeave={() => setPaletteOpen(false)}
+      >
+        <aside className="glass-panel relative h-full overflow-y-auto rounded-l-[1.75rem] rounded-r-[1.25rem] p-5 shadow-[4px_0_24px_rgba(11,28,48,0.10)]">
+          {/* Collapsed indicator — pinned to the right edge, fades out when open */}
+          <div
+            className={cn(
+              "absolute right-0 top-0 flex h-full w-[3.25rem] flex-col items-center justify-center gap-3 transition-opacity duration-200",
+              paletteOpen ? "pointer-events-none opacity-0" : "opacity-100",
+            )}
+          >
+            <ChevronRight className="h-5 w-5 animate-pulse text-[var(--on-surface-variant)]" />
+            <div className="flex flex-col items-center gap-2">
+              <RadioTower className="h-4 w-4 text-primary" />
+              <GitBranch className="h-4 w-4 text-amber-500" />
+              <Workflow className="h-4 w-4 text-emerald-500" />
+            </div>
+          </div>
+
+          {/* Full palette content — always laid out, just fades in/out */}
+          <div
+            className={cn(
+              "transition-opacity duration-200",
+              paletteOpen ? "opacity-100" : "pointer-events-none opacity-0",
+            )}
+          >
+            <p className="label-caps">Node palette</p>
+            <h2 className="mt-2 text-lg font-bold tracking-[-0.02em] text-[var(--on-surface)]">
+              Drag nodes
+            </h2>
+            <p className="mt-2 text-xs leading-5 text-[var(--on-surface-variant)]">
+              Drop a node anywhere, connect it, then double-click to inspect.
+            </p>
+
+            <div className="mt-5 space-y-3">
+              <NodePaletteCard
+                nodeType="trigger"
+                title="Trigger"
+                description="Only one trigger can start the workflow."
+                disabled={hasTrigger}
+              />
+              <NodePaletteCard
+                nodeType="condition"
+                title="Condition"
+                description="Gate the flow with a payload or context rule."
+              />
+              <NodePaletteCard
+                nodeType="action"
+                title="Action"
+                description="Webhooks, email, tasks, or record updates."
+              />
+            </div>
+
+            <div className="mt-5 rounded-[1.5rem] bg-[var(--surface-container-low)] p-4">
+              <div className="flex items-start gap-3">
+                <div className="premium-gradient flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl text-white">
+                  <Sparkles className="h-4 w-4" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-[var(--on-surface)]">
+                    Tips
+                  </p>
+                  <p className="mt-1 text-[11px] leading-4 text-[var(--on-surface-variant)]">
+                    Drag nodes freely, connect from handles, press Delete to
+                    remove selected nodes or edges.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      {/* ── Mobile palette (always visible, no hover trick) ── */}
+      <aside className="glass-panel rounded-[1.75rem] p-5 sm:p-6 xl:hidden">
         <p className="label-caps">Node palette</p>
         <h2 className="mt-2 text-xl font-bold tracking-[-0.02em] text-[var(--on-surface)]">
           Drag nodes into the canvas
         </h2>
-        <p className="mt-3 text-sm leading-6 text-[var(--on-surface-variant)]">
-          Drop a node anywhere, connect it from handle to handle, then
-          double-click any node to open the popup inspector.
-        </p>
-
-        <div className="mt-6 space-y-3">
+        <div className="mt-4 flex flex-wrap gap-3">
           <NodePaletteCard
             nodeType="trigger"
             title="Trigger"
@@ -145,34 +234,17 @@ export function WorkflowFlowEditor({
           <NodePaletteCard
             nodeType="condition"
             title="Condition"
-            description="Gate the flow with a payload or context rule before actions continue."
+            description="Gate the flow with a payload or context rule."
           />
           <NodePaletteCard
             nodeType="action"
             title="Action"
-            description="Send webhooks, deliver email, create tasks, or update tenant-safe records."
+            description="Webhooks, email, tasks, or record updates."
           />
-        </div>
-
-        <div className="mt-6 rounded-[1.5rem] bg-[var(--surface-container-low)] p-4">
-          <div className="flex items-start gap-3">
-            <div className="premium-gradient flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-white">
-              <Sparkles className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-[var(--on-surface)]">
-                Builder tips
-              </p>
-              <p className="mt-2 text-xs leading-5 text-[var(--on-surface-variant)]">
-                React Flow now powers the board, so you can drag nodes freely,
-                connect from the glowing handles, and keep editing inside the
-                popup inspector without managing extra branch labels.
-              </p>
-            </div>
-          </div>
         </div>
       </aside>
 
+      {/* ── Full-width canvas ── */}
       <WorkflowReactFlowCanvas
         canvas={canvas}
         selectedNodeId={selectedNodeId}
@@ -180,6 +252,7 @@ export function WorkflowFlowEditor({
         onOpenInspector={onOpenInspector}
         onCanvasChange={onCanvasChange}
         onCreateNode={onCreateNode}
+        onDeleteNode={onDeleteNode}
       />
     </section>
   );

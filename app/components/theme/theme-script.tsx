@@ -1,3 +1,4 @@
+import Script from "next/script";
 import {
   DEFAULT_THEME_PREFERENCE,
   THEME_STORAGE_KEY,
@@ -41,7 +42,9 @@ type ThemeScriptProps = {
 
 export function ThemeScript({ initialThemePreference }: ThemeScriptProps) {
   return (
-    <script
+    <Script
+      id="theme-bootstrap"
+      strategy="beforeInteractive"
       dangerouslySetInnerHTML={{
         __html: getThemeBootstrapScript(initialThemePreference),
       }}

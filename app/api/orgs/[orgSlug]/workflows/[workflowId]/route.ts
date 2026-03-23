@@ -10,10 +10,19 @@ type RouteContext = {
   params: Promise<{ orgSlug: string; workflowId: string }>;
 };
 
+export const workflowDetailRouteDeps = {
+  auth,
+  createRequestLogger,
+  handleRouteError,
+  getApiOrgAccess,
+  canViewWorkflows,
+  getWorkflowDetail,
+};
+
 export async function GET(req: Request, { params }: RouteContext) {
-  const session = await auth();
+  const session = await workflowDetailRouteDeps.auth();
   const { orgSlug, workflowId } = await params;
-  const logger = createRequestLogger(req, {
+  const logger = workflowDetailRouteDeps.createRequestLogger(req, {
     route: "api.orgs.workflows.detail.get",
     organizationSlug: orgSlug,
     workflowId,
@@ -21,7 +30,7 @@ export async function GET(req: Request, { params }: RouteContext) {
   });
 
   try {
-    const access = await getApiOrgAccess({
+    const access = await workflowDetailRouteDeps.getApiOrgAccess({
       orgSlug,
       userId: session?.user?.id,
     });
@@ -29,11 +38,11 @@ export async function GET(req: Request, { params }: RouteContext) {
     if (!access.ok) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
-    if (!canViewWorkflows(access.context.membership.role)) {
+    if (!workflowDetailRouteDeps.canViewWorkflows(access.context.membership.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const detail = await getWorkflowDetail({
+    const detail = await workflowDetailRouteDeps.getWorkflowDetail({
       organizationId: access.context.organization.id,
       workflowId,
     });
@@ -42,7 +51,7 @@ export async function GET(req: Request, { params }: RouteContext) {
   } catch (error: unknown) {
     const message =
       error instanceof Error ? error.message : "Failed to load workflow";
-    return handleRouteError(error, {
+    return workflowDetailRouteDeps.handleRouteError(error, {
       request: req,
       logger,
       fallbackMessage: "Failed to load workflow",

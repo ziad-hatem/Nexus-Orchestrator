@@ -11,14 +11,22 @@ import type { WorkflowActionConfig } from "@/lib/server/workflows/types";
 function buildLog(
   message: string,
   data?: Record<string, unknown>,
+  level: "info" | "error" = "info",
 ): { at: string; level: "info" | "error"; message: string; data?: Record<string, unknown> } {
   return {
     at: new Date().toISOString(),
-    level: "info",
+    level,
     message,
     data,
   };
 }
+
+export const workflowActionExecutorDeps = {
+  executeSendWebhookAction,
+  executeSendEmailAction,
+  executeCreateTaskAction,
+  executeUpdateRecordFieldAction,
+};
 
 export async function executeWorkflowActionNode(params: {
   action: WorkflowActionConfig;
@@ -26,7 +34,7 @@ export async function executeWorkflowActionNode(params: {
 }): Promise<ExecutorResult> {
   switch (params.action.type) {
     case "send_webhook":
-      return executeSendWebhookAction({
+      return workflowActionExecutorDeps.executeSendWebhookAction({
         action: params.action,
         context: {
           correlationId: params.context.correlationId,
@@ -35,7 +43,7 @@ export async function executeWorkflowActionNode(params: {
         },
       });
     case "send_email":
-      return executeSendEmailAction({
+      return workflowActionExecutorDeps.executeSendEmailAction({
         action: params.action,
         context: {
           payload: params.context.payload,
@@ -43,7 +51,7 @@ export async function executeWorkflowActionNode(params: {
         },
       });
     case "create_task":
-      return executeCreateTaskAction({
+      return workflowActionExecutorDeps.executeCreateTaskAction({
         action: params.action,
         context: {
           organizationId: params.context.organizationId,
@@ -56,7 +64,7 @@ export async function executeWorkflowActionNode(params: {
         },
       });
     case "update_record_field":
-      return executeUpdateRecordFieldAction({
+      return workflowActionExecutorDeps.executeUpdateRecordFieldAction({
         action: params.action,
         context: {
           organizationId: params.context.organizationId,
@@ -77,7 +85,7 @@ export async function executeWorkflowActionNode(params: {
           buildLog("Unsupported legacy action reached execution.", {
             actionType: params.action.type,
             legacyIssue: params.action.legacyIssue ?? null,
-          }),
+          }, "error"),
         ],
         errorCode: "unsupported_legacy_action",
         errorMessage:

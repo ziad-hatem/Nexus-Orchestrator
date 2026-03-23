@@ -1,5 +1,3 @@
-import "server-only";
-
 import { writeAuditLog } from "@/lib/server/audit-log";
 import { getOptionalEnv } from "@/lib/env";
 import {
@@ -89,6 +87,43 @@ const WEBHOOK_REJECTION_METRIC_PREFIX = "wf:metrics:webhook:rejected";
 const WEBHOOK_RATE_LIMIT_METRIC_PREFIX = "wf:metrics:webhook:rate_limited";
 const WEBHOOK_DUPLICATE_METRIC_PREFIX = "wf:metrics:webhook:duplicate";
 
+export const triggerServiceDeps = {
+  writeAuditLog,
+  getOptionalEnv,
+  createWorkflowIngestionEventRow,
+  createWorkflowRunRow,
+  createTriggerBindingRow,
+  deactivateTriggerBindingsForWorkflow,
+  getActiveTriggerBindingByWorkflowDbId,
+  listWorkflowIngestionEventsByOrganization,
+  listWorkflowIngestionEventsByWorkflowDbId,
+  listWorkflowRowsByIds,
+  listWorkflowVersionRowsByIds,
+  markTriggerBindingSecretUsed,
+  updateTriggerBindingSecret,
+  updateWorkflowRunCreatedByEvent,
+  updateWorkflowRunEventLink,
+  enforceRateLimit,
+  incrementWindowCounter,
+  reserveIdempotencyKey,
+  createWebhookSecret,
+  verifyWebhookApiKey,
+  emitOperationalAlert,
+  evaluateOperationalAlerts,
+  getOperationsAlertLookbackMinutes,
+  createChildLogger,
+  writeLog,
+  matchInternalEventBindings,
+  matchWebhookTriggerBinding,
+  getWorkflowDraftRowByWorkflowDbId,
+  getWorkflowRowByPublicId,
+  getWorkflowVersionRow,
+  isDuplicateConstraintError,
+  getExecutionMaxRetries,
+  createWorkflowRunAttemptRow,
+  enqueueWorkflowRunForExecution,
+};
+
 export class WorkflowTriggerSecurityError extends Error {
   status: number;
 
@@ -129,14 +164,14 @@ function toRecord(value: unknown): Record<string, unknown> {
 }
 
 function createTriggerLogger(context: Record<string, unknown>) {
-  return createChildLogger({
+  return triggerServiceDeps.createChildLogger({
     route: "server.triggers.service",
     ...context,
   });
 }
 
 function getWebhookMetricWindowSeconds(): number {
-  return getOperationsAlertLookbackMinutes() * 60;
+  return triggerServiceDeps.getOperationsAlertLookbackMinutes() * 60;
 }
 
 async function trackWebhookMetric(params: {
@@ -150,7 +185,7 @@ async function trackWebhookMetric(params: {
       : params.metric === "rate_limited"
         ? WEBHOOK_RATE_LIMIT_METRIC_PREFIX
         : WEBHOOK_DUPLICATE_METRIC_PREFIX;
-  const counter = await incrementWindowCounter({
+  const counter = await triggerServiceDeps.incrementWindowCounter({
     key: `${prefix}:${params.binding.organization_id}:${params.binding.id}`,
     windowSeconds: getWebhookMetricWindowSeconds(),
   });
@@ -159,7 +194,7 @@ async function trackWebhookMetric(params: {
     return counter.current;
   }
 
-  const [alert] = evaluateOperationalAlerts({
+  const [alert] = triggerServiceDeps.evaluateOperationalAlerts({
     queueBacklog: 0,
     staleRunningCount: 0,
     recentWebhookRejections: counter.current,
@@ -167,7 +202,7 @@ async function trackWebhookMetric(params: {
   }).filter((candidate) => candidate.key === "webhook_rejection_spike");
 
   if (alert && alert.status !== "ok") {
-    emitOperationalAlert({
+    triggerServiceDeps.emitOperationalAlert({
       alert,
       context: {
         organizationId: params.binding.organization_id,
@@ -185,7 +220,10 @@ async function trackWebhookMetric(params: {
 }
 
 function getPublicAppOrigin(): string | null {
-  return getOptionalEnv("NEXT_PUBLIC_APP_URL") ?? getOptionalEnv("NEXTAUTH_URL");
+  return (
+    triggerServiceDeps.getOptionalEnv("NEXT_PUBLIC_APP_URL") ??
+    triggerServiceDeps.getOptionalEnv("NEXTAUTH_URL")
+  );
 }
 
 function toAbsoluteAppUrl(pathname: string | null): string | null {
@@ -331,7 +369,7 @@ async function loadWorkflowTriggerState(params: {
   organizationId: string;
   workflowId: string;
 }) {
-  const workflow = await getWorkflowRowByPublicId({
+  const workflow = await triggerServiceDeps.getWorkflowRowByPublicId({
     organizationId: params.organizationId,
     workflowId: params.workflowId,
   });
@@ -341,10 +379,10 @@ async function loadWorkflowTriggerState(params: {
   }
 
   const [binding, draftRow, version] = await Promise.all([
-    getActiveTriggerBindingByWorkflowDbId(workflow.id),
-    getWorkflowDraftRowByWorkflowDbId(workflow.id),
+    triggerServiceDeps.getActiveTriggerBindingByWorkflowDbId(workflow.id),
+    triggerServiceDeps.getWorkflowDraftRowByWorkflowDbId(workflow.id),
     workflow.latest_published_version_number
-      ? getWorkflowVersionRow({
+      ? triggerServiceDeps.getWorkflowVersionRow({
           workflowDbId: workflow.id,
           versionNumber: workflow.latest_published_version_number,
         })
@@ -379,8 +417,10 @@ async function mapIngestionEventsToSummaries(
   rows: WorkflowIngestionEventRow[],
 ): Promise<WorkflowIngestionEventSummary[]> {
   const [workflows, versions] = await Promise.all([
-    listWorkflowRowsByIds(rows.map((row) => row.workflow_id)),
-    listWorkflowVersionRowsByIds(rows.map((row) => row.workflow_version_id)),
+    triggerServiceDeps.listWorkflowRowsByIds(rows.map((row) => row.workflow_id)),
+    triggerServiceDeps.listWorkflowVersionRowsByIds(
+      rows.map((row) => row.workflow_version_id),
+    ),
   ]);
   const workflowMap = new Map(workflows.map((row) => [row.id, row]));
   const versionMap = new Map(versions.map((row) => [row.id, row]));
@@ -433,8 +473,10 @@ async function createAcceptedIngestionWithRun(params: {
   event: WorkflowIngestionEventRow;
   run: WorkflowPendingRunSummary;
 }> {
-  const [workflowLookup] = await listWorkflowRowsByIds([params.binding.workflow_id]);
-  const [versionLookup] = await listWorkflowVersionRowsByIds([
+  const [workflowLookup] = await triggerServiceDeps.listWorkflowRowsByIds([
+    params.binding.workflow_id,
+  ]);
+  const [versionLookup] = await triggerServiceDeps.listWorkflowVersionRowsByIds([
     params.binding.workflow_version_id,
   ]);
 
@@ -442,7 +484,7 @@ async function createAcceptedIngestionWithRun(params: {
     throw new WorkflowTriggerNotFoundError();
   }
 
-  const event = await createWorkflowIngestionEventRow({
+  const event = await triggerServiceDeps.createWorkflowIngestionEventRow({
     organizationId: params.binding.organization_id,
     workflowDbId: params.binding.workflow_id,
     workflowVersionId: params.binding.workflow_version_id,
@@ -458,7 +500,7 @@ async function createAcceptedIngestionWithRun(params: {
     triggeredByUserId: params.triggeredByUserId,
   });
 
-  const run = await createWorkflowRunRow({
+  const run = await triggerServiceDeps.createWorkflowRunRow({
     organizationId: params.binding.organization_id,
     workflowDbId: params.binding.workflow_id,
     workflowVersionId: params.binding.workflow_version_id,
@@ -468,10 +510,10 @@ async function createAcceptedIngestionWithRun(params: {
     triggerSource: params.binding.source_type,
     sourceContext: params.sourceContext,
     payload: params.payload,
-    maxAttempts: getExecutionMaxRetries(),
+    maxAttempts: triggerServiceDeps.getExecutionMaxRetries(),
     idempotencyKey: params.idempotencyKey ?? null,
   });
-  await createWorkflowRunAttemptRow({
+  await triggerServiceDeps.createWorkflowRunAttemptRow({
     runId: run.id,
     organizationId: run.organization_id,
     workflowId: run.workflow_id,
@@ -484,15 +526,15 @@ async function createAcceptedIngestionWithRun(params: {
   });
 
   await Promise.all([
-    updateWorkflowRunEventLink({
+    triggerServiceDeps.updateWorkflowRunEventLink({
       eventId: event.id,
       runId: run.id,
     }),
-    updateWorkflowRunCreatedByEvent({
+    triggerServiceDeps.updateWorkflowRunCreatedByEvent({
       runId: run.id,
       eventId: event.id,
     }),
-    enqueueWorkflowRunForExecution({
+    triggerServiceDeps.enqueueWorkflowRunForExecution({
       run,
       reason: "trigger",
     }),
@@ -525,7 +567,7 @@ export async function materializePublishedTriggerBinding(params: {
   userId: string;
   request?: Request | null;
 }) {
-  await deactivateTriggerBindingsForWorkflow({
+  await triggerServiceDeps.deactivateTriggerBindingsForWorkflow({
     workflowDbId: params.workflow.id,
     userId: params.userId,
   });
@@ -541,11 +583,11 @@ export async function materializePublishedTriggerBinding(params: {
   }
   const sourceType = params.trigger.type;
   const webhookSecret =
-    sourceType === "webhook" ? createWebhookSecret() : null;
+    sourceType === "webhook" ? triggerServiceDeps.createWebhookSecret() : null;
 
   let binding;
   try {
-    binding = await createTriggerBindingRow({
+    binding = await triggerServiceDeps.createTriggerBindingRow({
       organizationId: params.organizationId,
       workflowDbId: params.workflow.id,
       workflowVersionId: params.version.id,
@@ -568,7 +610,7 @@ export async function materializePublishedTriggerBinding(params: {
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    if (isDuplicateConstraintError(message)) {
+    if (triggerServiceDeps.isDuplicateConstraintError(message)) {
       throw new WorkflowTriggerConflictError(
         sourceType === "webhook"
           ? "This webhook path is already in use by another published workflow."
@@ -579,7 +621,7 @@ export async function materializePublishedTriggerBinding(params: {
     throw error;
   }
 
-  await writeAuditLog({
+  await triggerServiceDeps.writeAuditLog({
     organizationId: params.organizationId,
     actorUserId: params.userId,
     action: "workflow.trigger_binding_activated",
@@ -606,7 +648,7 @@ export async function getWorkflowTriggerDetails(params: {
   canTriggerManually: boolean;
 }): Promise<WorkflowTriggerDetails> {
   const state = await loadWorkflowTriggerState(params);
-  const attempts = await listWorkflowIngestionEventsByWorkflowDbId({
+  const attempts = await triggerServiceDeps.listWorkflowIngestionEventsByWorkflowDbId({
     workflowDbId: state.workflow.id,
   });
 
@@ -633,7 +675,7 @@ export async function listWorkflowTriggerAttempts(params: {
   workflowId: string;
   filters: TriggerAttemptFilters;
 }) {
-  const workflow = await getWorkflowRowByPublicId({
+  const workflow = await triggerServiceDeps.getWorkflowRowByPublicId({
     organizationId: params.organizationId,
     workflowId: params.workflowId,
   });
@@ -643,7 +685,7 @@ export async function listWorkflowTriggerAttempts(params: {
   }
 
   const summaries = await mapIngestionEventsToSummaries(
-    await listWorkflowIngestionEventsByWorkflowDbId({
+    await triggerServiceDeps.listWorkflowIngestionEventsByWorkflowDbId({
       workflowDbId: workflow.id,
     }),
   );
@@ -666,7 +708,9 @@ export async function listWorkflowStreams(params: {
   filters: StreamFilters;
 }) {
   const summaries = await mapIngestionEventsToSummaries(
-    await listWorkflowIngestionEventsByOrganization(params.organizationId),
+    await triggerServiceDeps.listWorkflowIngestionEventsByOrganization(
+      params.organizationId,
+    ),
   );
   const query = params.filters.query?.toLowerCase();
   const filtered = summaries.filter((item) => {
@@ -724,15 +768,15 @@ export async function regenerateWorkflowWebhookSecret(params: {
     );
   }
 
-  const secret = createWebhookSecret();
-  const binding = await updateTriggerBindingSecret({
+  const secret = triggerServiceDeps.createWebhookSecret();
+  const binding = await triggerServiceDeps.updateTriggerBindingSecret({
     bindingId: state.binding.id,
     secretHash: secret.hashed,
     secretLastFour: secret.lastFour,
     userId: params.userId,
   });
 
-  await writeAuditLog({
+  await triggerServiceDeps.writeAuditLog({
     organizationId: params.organizationId,
     actorUserId: params.userId,
     action: "workflow.webhook_secret_regenerated",
@@ -779,7 +823,7 @@ export async function executeManualTrigger(params: {
     );
   }
 
-  const rateLimit = await enforceRateLimit({
+  const rateLimit = await triggerServiceDeps.enforceRateLimit({
     key: buildManualRateLimitKey({
       organizationId: params.organizationId,
       workflowId: params.workflowId,
@@ -798,7 +842,7 @@ export async function executeManualTrigger(params: {
   };
 
   if (!rateLimit.ok) {
-    await createWorkflowIngestionEventRow({
+    await triggerServiceDeps.createWorkflowIngestionEventRow({
       organizationId: state.binding.organization_id,
       workflowDbId: state.binding.workflow_id,
       workflowVersionId: state.binding.workflow_version_id,
@@ -818,7 +862,7 @@ export async function executeManualTrigger(params: {
     throw new WorkflowTriggerRateLimitError();
   }
 
-  const idempotencyReservation = await reserveIdempotencyKey({
+  const idempotencyReservation = await triggerServiceDeps.reserveIdempotencyKey({
     key: buildManualIdempotencyKey({
       organizationId: params.organizationId,
       workflowId: params.workflowId,
@@ -829,7 +873,7 @@ export async function executeManualTrigger(params: {
   });
 
   if (!idempotencyReservation.reserved) {
-    await createWorkflowIngestionEventRow({
+    await triggerServiceDeps.createWorkflowIngestionEventRow({
       organizationId: state.binding.organization_id,
       workflowDbId: state.binding.workflow_id,
       workflowVersionId: state.binding.workflow_version_id,
@@ -859,7 +903,7 @@ export async function executeManualTrigger(params: {
     triggeredByUserId: params.userId,
   });
 
-  await writeAuditLog({
+  await triggerServiceDeps.writeAuditLog({
     organizationId: params.organizationId,
     actorUserId: params.userId,
     action: "workflow.manual_triggered",
@@ -885,7 +929,9 @@ export async function ingestWebhookDelivery(params: {
   apiKeyHeader?: string | null;
   deliveryId?: string | null;
 }) {
-  const binding = await matchWebhookTriggerBinding(params.pathname);
+  const binding = await triggerServiceDeps.matchWebhookTriggerBinding(
+    params.pathname,
+  );
   if (!binding) {
     return {
       kind: "not_found" as const,
@@ -909,7 +955,7 @@ export async function ingestWebhookDelivery(params: {
     rawBody: params.rawBody,
   };
 
-  const rateLimit = await enforceRateLimit({
+  const rateLimit = await triggerServiceDeps.enforceRateLimit({
     key: buildWebhookRateLimitKey({
       bindingId: binding.id,
       ipAddress: params.requestIp ?? "unknown",
@@ -924,7 +970,7 @@ export async function ingestWebhookDelivery(params: {
       metric: "rate_limited",
       reason: "rate_limited",
     }).catch(() => undefined);
-    await createWorkflowIngestionEventRow({
+    await triggerServiceDeps.createWorkflowIngestionEventRow({
       organizationId: binding.organization_id,
       workflowDbId: binding.workflow_id,
       workflowVersionId: binding.workflow_version_id,
@@ -940,17 +986,22 @@ export async function ingestWebhookDelivery(params: {
       requestIp: params.requestIp,
       requestUserAgent: params.requestUserAgent,
     });
-    writeLog(logger, "warn", "Webhook delivery exceeded rate limit", {
-      bindingId: binding.id,
-      requestIp: params.requestIp ?? null,
-    });
+    triggerServiceDeps.writeLog(
+      logger,
+      "warn",
+      "Webhook delivery exceeded rate limit",
+      {
+        bindingId: binding.id,
+        requestIp: params.requestIp ?? null,
+      },
+    );
     return {
       kind: "rate_limited" as const,
       binding,
     };
   }
 
-  const verification = verifyWebhookApiKey({
+  const verification = triggerServiceDeps.verifyWebhookApiKey({
     apiKeyHeader: params.apiKeyHeader ?? null,
     secretHash: binding.secret_hash,
   });
@@ -961,7 +1012,7 @@ export async function ingestWebhookDelivery(params: {
       metric: "rejected",
       reason: verification.reason,
     }).catch(() => undefined);
-    await createWorkflowIngestionEventRow({
+    await triggerServiceDeps.createWorkflowIngestionEventRow({
       organizationId: binding.organization_id,
       workflowDbId: binding.workflow_id,
       workflowVersionId: binding.workflow_version_id,
@@ -980,7 +1031,7 @@ export async function ingestWebhookDelivery(params: {
       requestIp: params.requestIp,
       requestUserAgent: params.requestUserAgent,
     });
-    await writeAuditLog({
+    await triggerServiceDeps.writeAuditLog({
       organizationId: binding.organization_id,
       actorUserId: null,
       action: "workflow.webhook_auth_rejected",
@@ -994,11 +1045,16 @@ export async function ingestWebhookDelivery(params: {
         requestUserAgent: params.requestUserAgent ?? null,
       },
     });
-    writeLog(logger, "warn", "Webhook API key validation failed", {
-      bindingId: binding.id,
-      reason: verification.reason,
-      requestIp: params.requestIp ?? null,
-    });
+    triggerServiceDeps.writeLog(
+      logger,
+      "warn",
+      "Webhook API key validation failed",
+      {
+        bindingId: binding.id,
+        reason: verification.reason,
+        requestIp: params.requestIp ?? null,
+      },
+    );
     return {
       kind: "rejected" as const,
       binding,
@@ -1006,14 +1062,16 @@ export async function ingestWebhookDelivery(params: {
     };
   }
 
-  await markTriggerBindingSecretUsed(binding.id).catch(() => undefined);
+  await triggerServiceDeps
+    .markTriggerBindingSecretUsed(binding.id)
+    .catch(() => undefined);
 
   const dedupeKey = buildWebhookIdempotencyKey({
     bindingId: binding.id,
     deliveryId: params.deliveryId ?? null,
     rawBody: params.rawBody,
   });
-  const idempotencyReservation = await reserveIdempotencyKey({
+  const idempotencyReservation = await triggerServiceDeps.reserveIdempotencyKey({
     key: dedupeKey,
     ttlSeconds: IDEMPOTENCY_TTL_SECONDS,
   });
@@ -1024,7 +1082,7 @@ export async function ingestWebhookDelivery(params: {
       metric: "duplicate",
       reason: "duplicate_delivery",
     }).catch(() => undefined);
-    await createWorkflowIngestionEventRow({
+    await triggerServiceDeps.createWorkflowIngestionEventRow({
       organizationId: binding.organization_id,
       workflowDbId: binding.workflow_id,
       workflowVersionId: binding.workflow_version_id,
@@ -1043,10 +1101,15 @@ export async function ingestWebhookDelivery(params: {
       requestIp: params.requestIp,
       requestUserAgent: params.requestUserAgent,
     });
-    writeLog(logger, "warn", "Duplicate webhook delivery rejected", {
-      bindingId: binding.id,
-      idempotencyKey: dedupeKey,
-    });
+    triggerServiceDeps.writeLog(
+      logger,
+      "warn",
+      "Duplicate webhook delivery rejected",
+      {
+        bindingId: binding.id,
+        idempotencyKey: dedupeKey,
+      },
+    );
     return {
       kind: "duplicate" as const,
       binding,
@@ -1065,7 +1128,7 @@ export async function ingestWebhookDelivery(params: {
     requestUserAgent: params.requestUserAgent,
   });
 
-  writeLog(logger, "info", "Webhook delivery accepted", {
+  triggerServiceDeps.writeLog(logger, "info", "Webhook delivery accepted", {
     bindingId: binding.id,
     runId: accepted.run.runId,
     correlationId: accepted.run.correlationId,
@@ -1085,7 +1148,9 @@ export async function ingestInternalEvent(params: {
   payload: Record<string, unknown>;
   occurredAt?: string;
 }) {
-  const bindings = await matchInternalEventBindings(params.eventKey);
+  const bindings = await triggerServiceDeps.matchInternalEventBindings(
+    params.eventKey,
+  );
   if (bindings.length === 0) {
     return {
       status: "accepted" as const,
@@ -1094,7 +1159,7 @@ export async function ingestInternalEvent(params: {
     };
   }
 
-  const rateLimit = await enforceRateLimit({
+  const rateLimit = await triggerServiceDeps.enforceRateLimit({
     key: buildInternalEventRateLimitKey(params.eventKey),
     limit: INTERNAL_EVENT_RATE_LIMIT_MAX_REQUESTS,
     windowSeconds: INTERNAL_EVENT_RATE_LIMIT_WINDOW_SECONDS,
@@ -1109,7 +1174,7 @@ export async function ingestInternalEvent(params: {
   if (!rateLimit.ok) {
     await Promise.all(
       bindings.map((binding) =>
-        createWorkflowIngestionEventRow({
+        triggerServiceDeps.createWorkflowIngestionEventRow({
           organizationId: binding.organization_id,
           workflowDbId: binding.workflow_id,
           workflowVersionId: binding.workflow_version_id,
@@ -1128,7 +1193,7 @@ export async function ingestInternalEvent(params: {
     throw new WorkflowTriggerRateLimitError();
   }
 
-  const reservation = await reserveIdempotencyKey({
+  const reservation = await triggerServiceDeps.reserveIdempotencyKey({
     key: buildInternalEventIdempotencyKey({
       eventId: params.eventId,
       eventKey: params.eventKey,
@@ -1139,7 +1204,7 @@ export async function ingestInternalEvent(params: {
   if (!reservation.reserved) {
     await Promise.all(
       bindings.map((binding) =>
-        createWorkflowIngestionEventRow({
+        triggerServiceDeps.createWorkflowIngestionEventRow({
           organizationId: binding.organization_id,
           workflowDbId: binding.workflow_id,
           workflowVersionId: binding.workflow_version_id,
@@ -1182,7 +1247,7 @@ export async function deactivateWorkflowTriggerBindings(params: {
   workflowDbId: string;
   userId: string;
 }) {
-  await deactivateTriggerBindingsForWorkflow({
+  await triggerServiceDeps.deactivateTriggerBindingsForWorkflow({
     workflowDbId: params.workflowDbId,
     userId: params.userId,
   });

@@ -95,7 +95,9 @@ function getActionCompletionState(action: WorkflowActionConfig): {
   if (action.type === "legacy_custom" || action.legacyIssue) {
     return {
       complete: false,
-      missing: [action.legacyIssue ?? "convert this legacy action to a supported type"],
+      missing: [
+        action.legacyIssue ?? "convert this legacy action to a supported type",
+      ],
     };
   }
 
@@ -203,7 +205,9 @@ function getRecordValueTypeLabel(valueType: WorkflowRecordValueType): string {
 
 type ConditionValueKind = "string" | "number" | "boolean" | "null";
 
-function getConditionValueKind(value: WorkflowConditionValue): ConditionValueKind {
+function getConditionValueKind(
+  value: WorkflowConditionValue,
+): ConditionValueKind {
   if (value === null) {
     return "null";
   }
@@ -326,11 +330,10 @@ export function WorkflowNodeInspector({
         : { complete: false, missing: [] },
     [selectedAction],
   );
-  const conditionValueKind =
-    selectedCondition
-      ? conditionValueKinds[selectedCondition.id] ??
-        getConditionValueKind(selectedCondition.value)
-      : "string";
+  const conditionValueKind = selectedCondition
+    ? (conditionValueKinds[selectedCondition.id] ??
+      getConditionValueKind(selectedCondition.value))
+    : "string";
 
   useEffect(() => {
     if (!copiedWebhookUrl) {
@@ -393,7 +396,8 @@ export function WorkflowNodeInspector({
 
       {!selectedKind ? (
         <div className="mt-5 rounded-[1.5rem] bg-[var(--surface-container-low)] p-5 text-sm leading-6 text-[var(--on-surface-variant)]">
-          Choose a trigger, condition, or action node from the canvas to configure its safe draft fields.
+          Choose a trigger, condition, or action node from the canvas to
+          configure its safe draft fields.
         </div>
       ) : null}
 
@@ -427,7 +431,10 @@ export function WorkflowNodeInspector({
           </div>
 
           <div>
-            <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-trigger-type">
+            <label
+              className="label-caps mb-2 ml-1 block"
+              htmlFor="workflow-trigger-type"
+            >
               Trigger type
             </label>
             <Select
@@ -440,8 +447,8 @@ export function WorkflowNodeInspector({
                     value === "webhook"
                       ? { method: "POST", path: "" }
                       : value === "internal_event"
-                        ? { eventKey: "ticket.created" }
-                      : {},
+                        ? { eventKey: "organization.created" }
+                        : {},
                 })
               }
             >
@@ -457,21 +464,29 @@ export function WorkflowNodeInspector({
           </div>
 
           <div>
-            <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-trigger-label">
+            <label
+              className="label-caps mb-2 ml-1 block"
+              htmlFor="workflow-trigger-label"
+            >
               Label
             </label>
             <Input
               id="workflow-trigger-label"
               value={trigger.label}
               disabled={disabled}
-              onChange={(event) => onChangeTrigger({ label: event.target.value })}
+              onChange={(event) =>
+                onChangeTrigger({ label: event.target.value })
+              }
               placeholder="Daily schedule trigger"
               className="input-field border-0 shadow-none"
             />
           </div>
 
           <div>
-            <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-trigger-description">
+            <label
+              className="label-caps mb-2 ml-1 block"
+              htmlFor="workflow-trigger-description"
+            >
               Description
             </label>
             <textarea
@@ -488,7 +503,8 @@ export function WorkflowNodeInspector({
 
           {trigger.type === "schedule" ? (
             <div className="rounded-[1.5rem] bg-[var(--error-container)] p-4 text-sm text-[var(--error)]">
-              Scheduled triggers are legacy-only in phase three. Switch this draft to manual, webhook, or internal event before publishing.
+              Scheduled triggers are legacy-only in phase three. Switch this
+              draft to manual, webhook, or internal event before publishing.
             </div>
           ) : null}
 
@@ -496,7 +512,10 @@ export function WorkflowNodeInspector({
             <div className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-trigger-method">
+                  <label
+                    className="label-caps mb-2 ml-1 block"
+                    htmlFor="workflow-trigger-method"
+                  >
                     Method
                   </label>
                   <Input
@@ -507,7 +526,10 @@ export function WorkflowNodeInspector({
                   />
                 </div>
                 <div>
-                  <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-trigger-path">
+                  <label
+                    className="label-caps mb-2 ml-1 block"
+                    htmlFor="workflow-trigger-path"
+                  >
                     Request path
                   </label>
                   <Input
@@ -540,14 +562,18 @@ export function WorkflowNodeInspector({
                         Direct webhook URL
                       </p>
                       <p className="mt-1 text-xs leading-5 text-[var(--on-surface-variant)]">
-                        Use this exact URL when posting into this webhook trigger.
+                        Use this exact URL when posting into this webhook
+                        trigger.
                       </p>
                     </div>
                   </div>
 
                   <div className="flex flex-col gap-3 sm:flex-row">
                     <Input
-                      value={webhookUrl || "Set a request path to generate the webhook URL"}
+                      value={
+                        webhookUrl ||
+                        "Set a request path to generate the webhook URL"
+                      }
                       readOnly
                       className="input-field border-0 shadow-none font-mono text-xs"
                     />
@@ -576,11 +602,16 @@ export function WorkflowNodeInspector({
 
           {trigger.type === "internal_event" ? (
             <div>
-              <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-trigger-event-key">
+              <label
+                className="label-caps mb-2 ml-1 block"
+                htmlFor="workflow-trigger-event-key"
+              >
                 Supported internal event
               </label>
               <Select
-                value={String(trigger.config.eventKey ?? "ticket.created")}
+                value={String(
+                  trigger.config.eventKey ?? "organization.created",
+                )}
                 disabled={disabled}
                 onValueChange={(value) =>
                   onChangeTrigger({
@@ -596,8 +627,21 @@ export function WorkflowNodeInspector({
                   <SelectValue placeholder="Choose an internal event" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="ticket.created">ticket.created</SelectItem>
-                  <SelectItem value="payment.failed">payment.failed</SelectItem>
+                  <SelectItem value="organization.created">
+                    organization.created
+                  </SelectItem>
+                  <SelectItem value="organization.updated">
+                    organization.updated
+                  </SelectItem>
+                  <SelectItem value="membership.created">
+                    membership.created
+                  </SelectItem>
+                  <SelectItem value="membership.updated">
+                    membership.updated
+                  </SelectItem>
+                  <SelectItem value="membership.suspended">
+                    membership.suspended
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -618,7 +662,9 @@ export function WorkflowNodeInspector({
                     Condition node
                   </p>
                   <p className="mt-1 text-xs text-[var(--on-surface-variant)]">
-                    Conditions gate the workflow. If the rule passes, execution continues. If not, the run ends cleanly before any action executes.
+                    Conditions gate the workflow. If the rule passes, execution
+                    continues. If not, the run ends cleanly before any action
+                    executes.
                   </p>
                 </div>
               </div>
@@ -636,7 +682,10 @@ export function WorkflowNodeInspector({
           </div>
 
           <div>
-            <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-condition-label">
+            <label
+              className="label-caps mb-2 ml-1 block"
+              htmlFor="workflow-condition-label"
+            >
               Label
             </label>
             <Input
@@ -654,7 +703,10 @@ export function WorkflowNodeInspector({
           </div>
 
           <div>
-            <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-condition-description">
+            <label
+              className="label-caps mb-2 ml-1 block"
+              htmlFor="workflow-condition-description"
+            >
               Description
             </label>
             <textarea
@@ -673,7 +725,9 @@ export function WorkflowNodeInspector({
 
           {selectedCondition.legacyIssue ? (
             <div className="rounded-[1.5rem] border border-[color:color-mix(in_srgb,var(--error)_18%,transparent)] bg-[color:color-mix(in_srgb,var(--error-container)_82%,transparent)] p-5">
-              <p className="label-caps text-[var(--error)]">Legacy rule needs repair</p>
+              <p className="label-caps text-[var(--error)]">
+                Legacy rule needs repair
+              </p>
               <p className="mt-2 text-sm leading-6 text-[var(--on-surface)]">
                 {selectedCondition.legacyIssue}
               </p>
@@ -690,7 +744,10 @@ export function WorkflowNodeInspector({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-condition-scope">
+              <label
+                className="label-caps mb-2 ml-1 block"
+                htmlFor="workflow-condition-scope"
+              >
                 Resolver source
               </label>
               <Select
@@ -718,7 +775,10 @@ export function WorkflowNodeInspector({
             </div>
 
             <div>
-              <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-condition-path">
+              <label
+                className="label-caps mb-2 ml-1 block"
+                htmlFor="workflow-condition-path"
+              >
                 Field path
               </label>
               <Input
@@ -743,7 +803,10 @@ export function WorkflowNodeInspector({
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-condition-operator">
+              <label
+                className="label-caps mb-2 ml-1 block"
+                htmlFor="workflow-condition-operator"
+              >
                 Operator
               </label>
               <Select
@@ -791,7 +854,10 @@ export function WorkflowNodeInspector({
 
             {selectedCondition.operator !== "exists" ? (
               <div>
-                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-condition-value-kind">
+                <label
+                  className="label-caps mb-2 ml-1 block"
+                  htmlFor="workflow-condition-value-kind"
+                >
                   Comparison value type
                 </label>
                 <Select
@@ -825,7 +891,12 @@ export function WorkflowNodeInspector({
               <div className="rounded-[1.25rem] bg-[var(--surface-container-low)] px-4 py-4 text-sm leading-6 text-[var(--on-surface-variant)]">
                 <p className="label-caps">Comparison value</p>
                 <p className="mt-2">
-                  The <span className="font-semibold text-[var(--on-surface)]">exists</span> operator only checks whether the field is present, so no comparison value is needed.
+                  The{" "}
+                  <span className="font-semibold text-[var(--on-surface)]">
+                    exists
+                  </span>{" "}
+                  operator only checks whether the field is present, so no
+                  comparison value is needed.
                 </p>
               </div>
             )}
@@ -834,7 +905,10 @@ export function WorkflowNodeInspector({
           {selectedCondition.operator !== "exists" ? (
             conditionValueKind === "boolean" ? (
               <div>
-                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-condition-value-boolean">
+                <label
+                  className="label-caps mb-2 ml-1 block"
+                  htmlFor="workflow-condition-value-boolean"
+                >
                   Comparison value
                 </label>
                 <Select
@@ -865,12 +939,18 @@ export function WorkflowNodeInspector({
                 <p className="label-caps">Comparison value</p>
                 <p className="mt-2">
                   This rule compares the resolved field against{" "}
-                  <span className="font-mono text-[var(--on-surface)]">null</span>.
+                  <span className="font-mono text-[var(--on-surface)]">
+                    null
+                  </span>
+                  .
                 </p>
               </div>
             ) : (
               <div>
-                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-condition-value">
+                <label
+                  className="label-caps mb-2 ml-1 block"
+                  htmlFor="workflow-condition-value"
+                >
                   Comparison value
                 </label>
                 <Input
@@ -892,9 +972,7 @@ export function WorkflowNodeInspector({
                     })
                   }
                   placeholder={
-                    conditionValueKind === "number"
-                      ? "1000"
-                      : "approved"
+                    conditionValueKind === "number" ? "1000" : "approved"
                   }
                   className="input-field border-0 shadow-none"
                 />
@@ -908,7 +986,8 @@ export function WorkflowNodeInspector({
               A matching rule continues along the connected pass path.
             </p>
             <p className="mt-2 text-sm leading-6 text-[var(--on-surface-variant)]">
-              When the rule does not match, the run ends successfully with a condition-not-met result and skips all downstream actions.
+              When the rule does not match, the run ends successfully with a
+              condition-not-met result and skips all downstream actions.
             </p>
           </div>
         </div>
@@ -927,7 +1006,8 @@ export function WorkflowNodeInspector({
                     Action node
                   </p>
                   <p className="mt-1 text-xs text-[var(--on-surface-variant)]">
-                    Actions perform the final work once validation conditions pass.
+                    Actions perform the final work once validation conditions
+                    pass.
                   </p>
                 </div>
               </div>
@@ -961,7 +1041,9 @@ export function WorkflowNodeInspector({
                     : "bg-amber-500/12 text-amber-800 dark:text-amber-200"
                 }`}
               >
-                {selectedActionCompletion.complete ? "Complete" : "Needs attention"}
+                {selectedActionCompletion.complete
+                  ? "Complete"
+                  : "Needs attention"}
               </span>
             </div>
 
@@ -973,7 +1055,10 @@ export function WorkflowNodeInspector({
           </div>
 
           <div>
-            <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-label">
+            <label
+              className="label-caps mb-2 ml-1 block"
+              htmlFor="workflow-action-label"
+            >
               Label
             </label>
             <Input
@@ -991,7 +1076,10 @@ export function WorkflowNodeInspector({
           </div>
 
           <div>
-            <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-description">
+            <label
+              className="label-caps mb-2 ml-1 block"
+              htmlFor="workflow-action-description"
+            >
               Description
             </label>
             <textarea
@@ -1009,7 +1097,10 @@ export function WorkflowNodeInspector({
           </div>
 
           <div>
-            <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-type">
+            <label
+              className="label-caps mb-2 ml-1 block"
+              htmlFor="workflow-action-type"
+            >
               Action type
             </label>
             <Select
@@ -1030,11 +1121,11 @@ export function WorkflowNodeInspector({
                         ),
                   legacyIssue:
                     value === "legacy_custom"
-                      ? selectedAction.legacyIssue ?? null
+                      ? (selectedAction.legacyIssue ?? null)
                       : null,
                   legacySourceType:
                     value === "legacy_custom"
-                      ? selectedAction.legacySourceType ?? null
+                      ? (selectedAction.legacySourceType ?? null)
                       : null,
                 })
               }
@@ -1046,7 +1137,9 @@ export function WorkflowNodeInspector({
                 <SelectItem value="send_email">Send email</SelectItem>
                 <SelectItem value="send_webhook">Send webhook</SelectItem>
                 <SelectItem value="create_task">Create task</SelectItem>
-                <SelectItem value="update_record_field">Update record field</SelectItem>
+                <SelectItem value="update_record_field">
+                  Update record field
+                </SelectItem>
                 {selectedAction.type === "legacy_custom" ? (
                   <SelectItem value="legacy_custom">Legacy custom</SelectItem>
                 ) : null}
@@ -1064,7 +1157,10 @@ export function WorkflowNodeInspector({
           {selectedAction.type === "send_email" ? (
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-email-to">
+                <label
+                  className="label-caps mb-2 ml-1 block"
+                  htmlFor="workflow-action-email-to"
+                >
                   Recipient
                 </label>
                 <Input
@@ -1086,7 +1182,10 @@ export function WorkflowNodeInspector({
               </div>
 
               <div>
-                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-email-reply-to">
+                <label
+                  className="label-caps mb-2 ml-1 block"
+                  htmlFor="workflow-action-email-reply-to"
+                >
                   Reply-to
                 </label>
                 <Input
@@ -1108,7 +1207,10 @@ export function WorkflowNodeInspector({
               </div>
 
               <div className="sm:col-span-2">
-                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-email-subject">
+                <label
+                  className="label-caps mb-2 ml-1 block"
+                  htmlFor="workflow-action-email-subject"
+                >
                   Subject
                 </label>
                 <Input
@@ -1130,7 +1232,10 @@ export function WorkflowNodeInspector({
               </div>
 
               <div className="sm:col-span-2">
-                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-email-body">
+                <label
+                  className="label-caps mb-2 ml-1 block"
+                  htmlFor="workflow-action-email-body"
+                >
                   Body
                 </label>
                 <textarea
@@ -1146,7 +1251,9 @@ export function WorkflowNodeInspector({
                       ),
                     })
                   }
-                  placeholder={"Hello {{ payload.customerName }},\n\nWe couldn't process your payment for {{ payload.orderId }}."}
+                  placeholder={
+                    "Hello {{ payload.customerName }},\n\nWe couldn't process your payment for {{ payload.orderId }}."
+                  }
                   className="min-h-24 w-full rounded-[1.1rem] border border-[color:color-mix(in_srgb,var(--outline-variant)_56%,transparent)] bg-[var(--input-background)] px-4 py-3 text-sm text-[var(--on-surface)] outline-none transition focus:border-primary/40 focus:ring-4 focus:ring-primary/10"
                 />
               </div>
@@ -1156,7 +1263,10 @@ export function WorkflowNodeInspector({
           {selectedAction.type === "send_webhook" ? (
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-webhook-method">
+                <label
+                  className="label-caps mb-2 ml-1 block"
+                  htmlFor="workflow-action-webhook-method"
+                >
                   Method
                 </label>
                 <Select
@@ -1164,7 +1274,11 @@ export function WorkflowNodeInspector({
                   disabled={disabled}
                   onValueChange={(value) =>
                     onChangeAction(selectedAction.id, {
-                      config: updateConfigRecord(selectedAction.config, "method", value),
+                      config: updateConfigRecord(
+                        selectedAction.config,
+                        "method",
+                        value,
+                      ),
                     })
                   }
                 >
@@ -1180,7 +1294,10 @@ export function WorkflowNodeInspector({
               </div>
 
               <div>
-                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-webhook-url">
+                <label
+                  className="label-caps mb-2 ml-1 block"
+                  htmlFor="workflow-action-webhook-url"
+                >
                   Destination URL
                 </label>
                 <Input
@@ -1202,7 +1319,10 @@ export function WorkflowNodeInspector({
               </div>
 
               <div className="sm:col-span-2">
-                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-webhook-headers">
+                <label
+                  className="label-caps mb-2 ml-1 block"
+                  htmlFor="workflow-action-webhook-headers"
+                >
                   Headers
                 </label>
                 <textarea
@@ -1218,13 +1338,18 @@ export function WorkflowNodeInspector({
                       ),
                     })
                   }
-                  placeholder={"Content-Type: application/json\nX-Customer-Id: {{ payload.customerId }}"}
+                  placeholder={
+                    "Content-Type: application/json\nX-Customer-Id: {{ payload.customerId }}"
+                  }
                   className="min-h-24 w-full rounded-[1.1rem] border border-[color:color-mix(in_srgb,var(--outline-variant)_56%,transparent)] bg-[var(--input-background)] px-4 py-3 text-sm font-mono text-[var(--on-surface)] outline-none transition focus:border-primary/40 focus:ring-4 focus:ring-primary/10"
                 />
               </div>
 
               <div className="sm:col-span-2">
-                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-webhook-body">
+                <label
+                  className="label-caps mb-2 ml-1 block"
+                  htmlFor="workflow-action-webhook-body"
+                >
                   Request body
                 </label>
                 <textarea
@@ -1240,7 +1365,9 @@ export function WorkflowNodeInspector({
                       ),
                     })
                   }
-                  placeholder={'{"ticketId":"{{ payload.ticketId }}","status":"failed"}'}
+                  placeholder={
+                    '{"ticketId":"{{ payload.ticketId }}","status":"failed"}'
+                  }
                   className="min-h-24 w-full rounded-[1.1rem] border border-[color:color-mix(in_srgb,var(--outline-variant)_56%,transparent)] bg-[var(--input-background)] px-4 py-3 text-sm font-mono text-[var(--on-surface)] outline-none transition focus:border-primary/40 focus:ring-4 focus:ring-primary/10"
                 />
               </div>
@@ -1250,7 +1377,10 @@ export function WorkflowNodeInspector({
           {selectedAction.type === "create_task" ? (
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-task-title">
+                <label
+                  className="label-caps mb-2 ml-1 block"
+                  htmlFor="workflow-action-task-title"
+                >
                   Task title
                 </label>
                 <Input
@@ -1272,7 +1402,10 @@ export function WorkflowNodeInspector({
               </div>
 
               <div>
-                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-task-assignee">
+                <label
+                  className="label-caps mb-2 ml-1 block"
+                  htmlFor="workflow-action-task-assignee"
+                >
                   Assignee email
                 </label>
                 <Input
@@ -1294,7 +1427,10 @@ export function WorkflowNodeInspector({
               </div>
 
               <div>
-                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-task-due-at">
+                <label
+                  className="label-caps mb-2 ml-1 block"
+                  htmlFor="workflow-action-task-due-at"
+                >
                   Due at
                 </label>
                 <Input
@@ -1316,7 +1452,10 @@ export function WorkflowNodeInspector({
               </div>
 
               <div className="sm:col-span-2">
-                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-task-description">
+                <label
+                  className="label-caps mb-2 ml-1 block"
+                  htmlFor="workflow-action-task-description"
+                >
                   Description
                 </label>
                 <textarea
@@ -1332,7 +1471,9 @@ export function WorkflowNodeInspector({
                       ),
                     })
                   }
-                  placeholder={"Customer {{ payload.customerEmail }} needs a manual follow-up after the failed payment."}
+                  placeholder={
+                    "Customer {{ payload.customerEmail }} needs a manual follow-up after the failed payment."
+                  }
                   className="min-h-24 w-full rounded-[1.1rem] border border-[color:color-mix(in_srgb,var(--outline-variant)_56%,transparent)] bg-[var(--input-background)] px-4 py-3 text-sm text-[var(--on-surface)] outline-none transition focus:border-primary/40 focus:ring-4 focus:ring-primary/10"
                 />
               </div>
@@ -1342,7 +1483,10 @@ export function WorkflowNodeInspector({
           {selectedAction.type === "update_record_field" ? (
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-record-type">
+                <label
+                  className="label-caps mb-2 ml-1 block"
+                  htmlFor="workflow-action-record-type"
+                >
                   Record type
                 </label>
                 <Input
@@ -1364,7 +1508,10 @@ export function WorkflowNodeInspector({
               </div>
 
               <div>
-                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-record-key">
+                <label
+                  className="label-caps mb-2 ml-1 block"
+                  htmlFor="workflow-action-record-key"
+                >
                   Record key
                 </label>
                 <Input
@@ -1386,7 +1533,10 @@ export function WorkflowNodeInspector({
               </div>
 
               <div>
-                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-record-field">
+                <label
+                  className="label-caps mb-2 ml-1 block"
+                  htmlFor="workflow-action-record-field"
+                >
                   Field
                 </label>
                 <Input
@@ -1408,7 +1558,10 @@ export function WorkflowNodeInspector({
               </div>
 
               <div>
-                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-record-value-type">
+                <label
+                  className="label-caps mb-2 ml-1 block"
+                  htmlFor="workflow-action-record-value-type"
+                >
                   Value type
                 </label>
                 <Select
@@ -1432,7 +1585,13 @@ export function WorkflowNodeInspector({
                   </SelectTrigger>
                   <SelectContent>
                     {(
-                      ["string", "number", "boolean", "null", "json"] as WorkflowRecordValueType[]
+                      [
+                        "string",
+                        "number",
+                        "boolean",
+                        "null",
+                        "json",
+                      ] as WorkflowRecordValueType[]
                     ).map((valueType) => (
                       <SelectItem key={valueType} value={valueType}>
                         {getRecordValueTypeLabel(valueType)}
@@ -1442,13 +1601,18 @@ export function WorkflowNodeInspector({
                 </Select>
               </div>
 
-              {String(selectedAction.config.valueType ?? "string") === "null" ? (
+              {String(selectedAction.config.valueType ?? "string") ===
+              "null" ? (
                 <div className="sm:col-span-2 rounded-[1.25rem] bg-[var(--surface-container-low)] px-4 py-4 text-sm leading-6 text-[var(--on-surface-variant)]">
-                  This action will write a null value into the selected workflow-managed record field.
+                  This action will write a null value into the selected
+                  workflow-managed record field.
                 </div>
               ) : (
                 <div className="sm:col-span-2">
-                  <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-record-value-template">
+                  <label
+                    className="label-caps mb-2 ml-1 block"
+                    htmlFor="workflow-action-record-value-template"
+                  >
                     Value template
                   </label>
                   <textarea
@@ -1465,7 +1629,8 @@ export function WorkflowNodeInspector({
                       })
                     }
                     placeholder={
-                      String(selectedAction.config.valueType ?? "string") === "json"
+                      String(selectedAction.config.valueType ?? "string") ===
+                      "json"
                         ? '{"status":"failed","reason":"{{ payload.failureReason }}"}'
                         : "{{ payload.failureReason }}"
                     }

@@ -13,10 +13,19 @@ type RouteContext = {
   params: Promise<{ orgSlug: string; runId: string }>;
 };
 
+export const executionDetailRouteDeps = {
+  auth,
+  createRequestLogger,
+  handleRouteError,
+  getWorkflowRunDetail,
+  getApiOrgAccess,
+  canViewExecutions,
+};
+
 export async function GET(req: Request, { params }: RouteContext) {
-  const session = await auth();
+  const session = await executionDetailRouteDeps.auth();
   const { orgSlug, runId } = await params;
-  const logger = createRequestLogger(req, {
+  const logger = executionDetailRouteDeps.createRequestLogger(req, {
     route: "api.orgs.executions.run.get",
     organizationSlug: orgSlug,
     runId,
@@ -24,7 +33,7 @@ export async function GET(req: Request, { params }: RouteContext) {
   });
 
   try {
-    const access = await getApiOrgAccess({
+    const access = await executionDetailRouteDeps.getApiOrgAccess({
       orgSlug,
       userId: session?.user?.id,
     });
@@ -32,11 +41,11 @@ export async function GET(req: Request, { params }: RouteContext) {
     if (!access.ok) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
-    if (!canViewExecutions(access.context.membership.role)) {
+    if (!executionDetailRouteDeps.canViewExecutions(access.context.membership.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const result = await getWorkflowRunDetail({
+    const result = await executionDetailRouteDeps.getWorkflowRunDetail({
       organizationId: access.context.organization.id,
       runId,
     });
@@ -47,7 +56,7 @@ export async function GET(req: Request, { params }: RouteContext) {
       return NextResponse.json({ error: error.message }, { status: 404 });
     }
 
-    return handleRouteError(error, {
+    return executionDetailRouteDeps.handleRouteError(error, {
       request: req,
       logger,
       fallbackMessage: "Failed to load execution detail",

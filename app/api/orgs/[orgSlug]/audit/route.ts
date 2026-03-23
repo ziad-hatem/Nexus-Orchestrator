@@ -11,17 +11,27 @@ type RouteContext = {
   params: Promise<{ orgSlug: string }>;
 };
 
+export const auditRouteDeps = {
+  auth,
+  createRequestLogger,
+  handleRouteError,
+  listAuditLogs,
+  getApiOrgAccess,
+  canViewAuditLogs,
+  auditFilterSchema,
+};
+
 export async function GET(req: Request, { params }: RouteContext) {
-  const session = await auth();
+  const session = await auditRouteDeps.auth();
   const { orgSlug } = await params;
-  const logger = createRequestLogger(req, {
+  const logger = auditRouteDeps.createRequestLogger(req, {
     route: "api.orgs.audit.get",
     organizationSlug: orgSlug,
     userId: session?.user?.id ?? null,
   });
 
   try {
-    const access = await getApiOrgAccess({
+    const access = await auditRouteDeps.getApiOrgAccess({
       orgSlug,
       userId: session?.user?.id,
     });
@@ -29,12 +39,12 @@ export async function GET(req: Request, { params }: RouteContext) {
     if (!access.ok) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
-    if (!canViewAuditLogs(access.context.membership.role)) {
+    if (!auditRouteDeps.canViewAuditLogs(access.context.membership.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const searchParams = new URL(req.url).searchParams;
-    const parsedFilters = auditFilterSchema.safeParse({
+    const parsedFilters = auditRouteDeps.auditFilterSchema.safeParse({
       query: searchParams.get("query") ?? undefined,
       action: searchParams.get("action") ?? undefined,
       page: searchParams.get("page") ?? undefined,
@@ -48,7 +58,7 @@ export async function GET(req: Request, { params }: RouteContext) {
       );
     }
 
-    const { logs, total, summary, availableActions } = await listAuditLogs(
+    const { logs, total, summary, availableActions } = await auditRouteDeps.listAuditLogs(
       access.context.organization.id,
       parsedFilters.data,
     );
@@ -65,7 +75,7 @@ export async function GET(req: Request, { params }: RouteContext) {
       { status: 200 },
     );
   } catch (error: unknown) {
-    return handleRouteError(error, {
+    return auditRouteDeps.handleRouteError(error, {
       request: req,
       logger,
       fallbackMessage: "Failed to load audit logs",

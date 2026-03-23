@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  useMemo,
-  useRef,
-  useState,
-  type DragEvent,
-} from "react";
+import { useCallback, useMemo, useRef, useState, type DragEvent } from "react";
 import {
   addEdge,
   applyNodeChanges,
@@ -20,12 +15,20 @@ import {
   ReactFlow,
   type Connection,
   type Edge,
+  type EdgeChange,
   type Node,
   type NodeChange,
   type NodeProps,
   type ReactFlowInstance,
+  applyEdgeChanges,
 } from "@xyflow/react";
-import { Crosshair, GitBranch, Link2, RadioTower, Workflow } from "lucide-react";
+import {
+  Crosshair,
+  GitBranch,
+  Link2,
+  RadioTower,
+  Workflow,
+} from "lucide-react";
 import { Button } from "@/app/components/ui/button";
 import { cn } from "@/app/components/ui/utils";
 import type {
@@ -49,6 +52,7 @@ type WorkflowReactFlowCanvasProps = {
     nodeType: WorkflowNodeType,
     position?: WorkflowCanvasNode["position"],
   ) => string | null;
+  onDeleteNode: (nodeId: string) => void;
 };
 
 type FlowNodeData = {
@@ -75,8 +79,7 @@ const FLOW_NODE_ICONS = {
 const EDGE_TONES = {
   trigger: {
     stroke: "var(--primary)",
-    glow:
-      "drop-shadow(0 0 10px color-mix(in srgb, var(--primary) 26%, transparent))",
+    glow: "drop-shadow(0 0 10px color-mix(in srgb, var(--primary) 26%, transparent))",
     minimap: "var(--primary)",
   },
   condition: {
@@ -194,7 +197,7 @@ function createFlowNode(
     },
     selected: isSelected,
     draggable: true,
-    deletable: false,
+    deletable: true,
     selectable: true,
     width: NODE_WIDTH,
     height: NODE_HEIGHT,
@@ -342,10 +345,12 @@ export function WorkflowReactFlowCanvas({
   onOpenInspector,
   onCanvasChange,
   onCreateNode,
+  onDeleteNode,
 }: WorkflowReactFlowCanvasProps) {
-  const reactFlowRef = useRef<ReactFlowInstance<WorkflowFlowNode, WorkflowFlowEdge> | null>(
-    null,
-  );
+  const reactFlowRef = useRef<ReactFlowInstance<
+    WorkflowFlowNode,
+    WorkflowFlowEdge
+  > | null>(null);
   const nodeMap = useMemo(
     () => new Map(canvas.nodes.map((node) => [node.id, node])),
     [canvas.nodes],
@@ -364,7 +369,9 @@ export function WorkflowReactFlowCanvas({
   const [isConnecting, setIsConnecting] = useState(false);
 
   const handleNodesChange = (changes: NodeChange<WorkflowFlowNode>[]) => {
-    const hasPositionChange = changes.some((change) => change.type === "position");
+    const hasPositionChange = changes.some(
+      (change) => change.type === "position",
+    );
     if (!hasPositionChange) {
       return;
     }
@@ -372,6 +379,26 @@ export function WorkflowReactFlowCanvas({
     const nextNodes = applyNodeChanges(changes, flowNodes);
     onCanvasChange(exportCanvas(nextNodes, flowEdges, canvas));
   };
+
+  const handleEdgesChange = useCallback(
+    (changes: EdgeChange<WorkflowFlowEdge>[]) => {
+      const nextEdges = applyEdgeChanges(changes, flowEdges);
+      const hasRemoval = changes.some((c) => c.type === "remove");
+      if (hasRemoval) {
+        onCanvasChange(exportCanvas(flowNodes, nextEdges, canvas));
+      }
+    },
+    [flowNodes, flowEdges, canvas, onCanvasChange],
+  );
+
+  const handleNodesDelete = useCallback(
+    (deleted: WorkflowFlowNode[]) => {
+      for (const node of deleted) {
+        onDeleteNode(node.id);
+      }
+    },
+    [onDeleteNode],
+  );
 
   const handleConnect = (connection: Connection) => {
     if (!connection.source || !connection.target) {
@@ -397,10 +424,7 @@ export function WorkflowReactFlowCanvas({
     );
     const baseEdges =
       sourceNode?.type === "condition" || sourceNode?.type === "trigger"
-        ? flowEdges.filter(
-            (edge) =>
-              edge.source !== connection.source,
-          )
+        ? flowEdges.filter((edge) => edge.source !== connection.source)
         : flowEdges;
 
     const nextEdges = addEdge(
@@ -476,7 +500,7 @@ export function WorkflowReactFlowCanvas({
       }}
       onDrop={handleDrop}
     >
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:color-mix(in_srgb,var(--outline-variant)_48%,transparent)] px-5 py-5 sm:px-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[color:color-mix(in_srgb,var(--outline-variant)_48%,transparent)] px-5 py-5 sm:px-6 xl:pl-16">
         <div>
           <p className="label-caps">Canvas</p>
           <h2 className="mt-2 text-xl font-bold tracking-[-0.02em] text-[var(--on-surface)]">
@@ -527,6 +551,8 @@ export function WorkflowReactFlowCanvas({
             });
           }}
           onNodesChange={handleNodesChange}
+          onEdgesChange={handleEdgesChange}
+          onNodesDelete={handleNodesDelete}
           onConnect={handleConnect}
           onConnectStart={() => setIsConnecting(true)}
           onConnectEnd={() => setIsConnecting(false)}
@@ -563,7 +589,7 @@ export function WorkflowReactFlowCanvas({
           panOnScroll
           selectionOnDrag
           zoomOnDoubleClick={false}
-          deleteKeyCode={null}
+          deleteKeyCode={["Delete", "Backspace"]}
           minZoom={0.35}
           maxZoom={1.8}
           fitView

@@ -17,10 +17,20 @@ type RouteContext = {
   params: Promise<{ orgSlug: string; workflowId: string }>;
 };
 
+export const workflowPublishRouteDeps = {
+  auth,
+  createRequestLogger,
+  handleRouteError,
+  getApiOrgAccess,
+  canPublishWorkflows,
+  publishWorkflowSchema,
+  publishWorkflow,
+};
+
 export async function POST(req: Request, { params }: RouteContext) {
-  const session = await auth();
+  const session = await workflowPublishRouteDeps.auth();
   const { orgSlug, workflowId } = await params;
-  const logger = createRequestLogger(req, {
+  const logger = workflowPublishRouteDeps.createRequestLogger(req, {
     route: "api.orgs.workflows.publish.post",
     organizationSlug: orgSlug,
     workflowId,
@@ -34,7 +44,7 @@ export async function POST(req: Request, { params }: RouteContext) {
     body = {};
   }
 
-  const parsed = publishWorkflowSchema.safeParse(body);
+  const parsed = workflowPublishRouteDeps.publishWorkflowSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
       { error: parsed.error.issues[0]?.message ?? "Invalid publish payload" },
@@ -43,7 +53,7 @@ export async function POST(req: Request, { params }: RouteContext) {
   }
 
   try {
-    const access = await getApiOrgAccess({
+    const access = await workflowPublishRouteDeps.getApiOrgAccess({
       orgSlug,
       userId: session?.user?.id,
     });
@@ -51,11 +61,11 @@ export async function POST(req: Request, { params }: RouteContext) {
     if (!access.ok) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
-    if (!canPublishWorkflows(access.context.membership.role)) {
+    if (!workflowPublishRouteDeps.canPublishWorkflows(access.context.membership.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const version = await publishWorkflow({
+    const version = await workflowPublishRouteDeps.publishWorkflow({
       organizationId: access.context.organization.id,
       workflowId,
       userId: access.context.userId,
@@ -84,7 +94,7 @@ export async function POST(req: Request, { params }: RouteContext) {
       return NextResponse.json(responseBody, { status });
     }
 
-    return handleRouteError(error, {
+    return workflowPublishRouteDeps.handleRouteError(error, {
       request: req,
       logger,
       fallbackMessage: "Failed to publish workflow",

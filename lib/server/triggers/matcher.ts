@@ -1,5 +1,3 @@
-import "server-only";
-
 import { normalizeWebhookPath } from "@/lib/server/validation";
 import {
   getActiveManualBindingByWorkflowDbId,
@@ -7,14 +5,23 @@ import {
   listActiveInternalEventBindings,
 } from "@/lib/server/triggers/repository";
 
+export const triggerMatcherDeps = {
+  normalizeWebhookPath,
+  getActiveManualBindingByWorkflowDbId,
+  getActiveWebhookBindingByMatchKey,
+  listActiveInternalEventBindings,
+};
+
 export async function matchManualTriggerBinding(workflowDbId: string) {
-  return getActiveManualBindingByWorkflowDbId(workflowDbId);
+  return triggerMatcherDeps.getActiveManualBindingByWorkflowDbId(workflowDbId);
 }
 
 export async function matchWebhookTriggerBinding(pathname: string) {
-  return getActiveWebhookBindingByMatchKey(normalizeWebhookPath(pathname));
+  return triggerMatcherDeps.getActiveWebhookBindingByMatchKey(
+    triggerMatcherDeps.normalizeWebhookPath(pathname),
+  );
 }
 
 export async function matchInternalEventBindings(eventKey: string) {
-  return listActiveInternalEventBindings(eventKey);
+  return triggerMatcherDeps.listActiveInternalEventBindings(eventKey);
 }

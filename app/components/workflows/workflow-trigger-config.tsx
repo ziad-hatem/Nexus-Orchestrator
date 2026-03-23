@@ -2,7 +2,14 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, CheckCircle2, Loader2, Radio, Save, Webhook } from "lucide-react";
+import {
+  ArrowRight,
+  CheckCircle2,
+  Loader2,
+  Radio,
+  Save,
+  Webhook,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/app/components/ui/button";
@@ -50,12 +57,14 @@ const TRIGGER_OPTIONS: Array<{
   {
     value: "webhook",
     label: "Webhook",
-    description: "Accept inbound POST deliveries on an API key protected endpoint.",
+    description:
+      "Accept inbound POST deliveries on an API key protected endpoint.",
   },
   {
     value: "internal_event",
     label: "Internal event",
-    description: "Fan out trusted Nexus events like ticket.created and payment.failed.",
+    description:
+      "Fan out trusted Nexus events like organization.created and membership.suspended.",
   },
 ];
 
@@ -78,7 +87,7 @@ function defaultTriggerForType(type: SupportedWorkflowTriggerType) {
       label: "Internal event trigger",
       description: "",
       config: {
-        eventKey: "ticket.created",
+        eventKey: "organization.created",
       },
     };
   }
@@ -206,16 +215,24 @@ export function WorkflowTriggerConfig({
               Configure how {workflowName} starts
             </h1>
             <p className="mt-3 text-sm text-[rgba(255,255,255,0.82)]">
-              Keep new workflows on manual, webhook, or internal event sources. Legacy scheduled drafts stay readable but cannot be published.
+              Keep new workflows on manual, webhook, or internal event sources.
+              Legacy scheduled drafts stay readable but cannot be published.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Button asChild variant="outline" className="rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/16">
+            <Button
+              asChild
+              variant="outline"
+              className="rounded-xl border-white/20 bg-white/10 text-white hover:bg-white/16"
+            >
               <Link href={`/org/${orgSlug}/workflows/${workflowId}`}>
                 Back to workflow
               </Link>
             </Button>
-            <Button asChild className="rounded-xl bg-[var(--surface-container-lowest)] text-primary hover:bg-[var(--surface-container-high)]">
+            <Button
+              asChild
+              className="rounded-xl bg-[var(--surface-container-lowest)] text-primary hover:bg-[var(--surface-container-high)]"
+            >
               <Link href={`/org/${orgSlug}/workflows/${workflowId}/draft`}>
                 Open draft editor
                 <ArrowRight className="h-4 w-4" />
@@ -262,7 +279,10 @@ export function WorkflowTriggerConfig({
 
             <div className="mt-6 grid gap-4">
               <div>
-                <label className="label-caps mb-2 ml-1 block" htmlFor="trigger-label">
+                <label
+                  className="label-caps mb-2 ml-1 block"
+                  htmlFor="trigger-label"
+                >
                   Trigger label
                 </label>
                 <Input
@@ -279,7 +299,10 @@ export function WorkflowTriggerConfig({
                 />
               </div>
               <div>
-                <label className="label-caps mb-2 ml-1 block" htmlFor="trigger-description">
+                <label
+                  className="label-caps mb-2 ml-1 block"
+                  htmlFor="trigger-description"
+                >
                   Description
                 </label>
                 <textarea
@@ -299,9 +322,7 @@ export function WorkflowTriggerConfig({
               {trigger.type === "webhook" ? (
                 <div className="grid gap-4 lg:grid-cols-2">
                   <div>
-                    <label className="label-caps mb-2 ml-1 block">
-                      Method
-                    </label>
+                    <label className="label-caps mb-2 ml-1 block">Method</label>
                     <Input
                       value="POST"
                       disabled
@@ -309,7 +330,10 @@ export function WorkflowTriggerConfig({
                     />
                   </div>
                   <div>
-                    <label className="label-caps mb-2 ml-1 block" htmlFor="trigger-webhook-path">
+                    <label
+                      className="label-caps mb-2 ml-1 block"
+                      htmlFor="trigger-webhook-path"
+                    >
                       Request path
                     </label>
                     <Input
@@ -335,11 +359,16 @@ export function WorkflowTriggerConfig({
 
               {trigger.type === "internal_event" ? (
                 <div>
-                  <label className="label-caps mb-2 ml-1 block" htmlFor="trigger-event-key">
+                  <label
+                    className="label-caps mb-2 ml-1 block"
+                    htmlFor="trigger-event-key"
+                  >
                     Supported event
                   </label>
                   <Select
-                    value={String(trigger.config.eventKey ?? "ticket.created")}
+                    value={String(
+                      trigger.config.eventKey ?? "organization.created",
+                    )}
                     disabled={!canEdit}
                     onValueChange={(value) =>
                       setTrigger((current) => ({
@@ -355,8 +384,21 @@ export function WorkflowTriggerConfig({
                       <SelectValue placeholder="Choose an internal event" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="ticket.created">ticket.created</SelectItem>
-                      <SelectItem value="payment.failed">payment.failed</SelectItem>
+                      <SelectItem value="organization.created">
+                        organization.created
+                      </SelectItem>
+                      <SelectItem value="organization.updated">
+                        organization.updated
+                      </SelectItem>
+                      <SelectItem value="membership.created">
+                        membership.created
+                      </SelectItem>
+                      <SelectItem value="membership.updated">
+                        membership.updated
+                      </SelectItem>
+                      <SelectItem value="membership.suspended">
+                        membership.suspended
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -456,7 +498,9 @@ export function WorkflowTriggerConfig({
               </p>
               <div className="mt-5">
                 <Button asChild variant="outline" className="rounded-xl">
-                  <Link href={`/org/${orgSlug}/workflows/${workflowId}/webhook`}>
+                  <Link
+                    href={`/org/${orgSlug}/workflows/${workflowId}/webhook`}
+                  >
                     Open webhook details
                     <ArrowRight className="h-4 w-4" />
                   </Link>

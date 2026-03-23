@@ -11,24 +11,34 @@ type RouteContext = {
   params: Promise<{ orgSlug: string }>;
 };
 
+export const operationsRouteDeps = {
+  auth,
+  createRequestLogger,
+  handleRouteError,
+  getApiOrgAccess,
+  getOperationsDashboardData,
+  canViewOperations,
+  operationsDashboardQuerySchema,
+};
+
 export async function GET(req: Request, { params }: RouteContext) {
-  const session = await auth();
+  const session = await operationsRouteDeps.auth();
   const { orgSlug } = await params;
-  const logger = createRequestLogger(req, {
+  const logger = operationsRouteDeps.createRequestLogger(req, {
     route: "api.orgs.operations.get",
     organizationSlug: orgSlug,
     userId: session?.user?.id ?? null,
   });
 
   try {
-    const parsedQuery = operationsDashboardQuerySchema.safeParse({
+    const parsedQuery = operationsRouteDeps.operationsDashboardQuerySchema.safeParse({
       emitAlerts: new URL(req.url).searchParams.get("emitAlerts") ?? undefined,
     });
     if (!parsedQuery.success) {
       return NextResponse.json({ error: "Invalid operations query" }, { status: 400 });
     }
 
-    const access = await getApiOrgAccess({
+    const access = await operationsRouteDeps.getApiOrgAccess({
       orgSlug,
       userId: session?.user?.id,
     });
@@ -36,11 +46,11 @@ export async function GET(req: Request, { params }: RouteContext) {
     if (!access.ok) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
-    if (!canViewOperations(access.context.membership.role)) {
+    if (!operationsRouteDeps.canViewOperations(access.context.membership.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const result = await getOperationsDashboardData({
+    const result = await operationsRouteDeps.getOperationsDashboardData({
       organizationId: access.context.organization.id,
       organizationSlug: access.context.organization.slug,
       emitAlerts: parsedQuery.data.emitAlerts,
@@ -48,7 +58,7 @@ export async function GET(req: Request, { params }: RouteContext) {
 
     return NextResponse.json(result, { status: 200 });
   } catch (error: unknown) {
-    return handleRouteError(error, {
+    return operationsRouteDeps.handleRouteError(error, {
       request: req,
       logger,
       fallbackMessage: "Failed to load operations dashboard",

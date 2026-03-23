@@ -24,7 +24,11 @@ const SENSITIVE_KEY_SEGMENTS = [
 ] as const;
 
 function normalizeKey(value: string): string {
-  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_");
+  return value
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_");
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -42,6 +46,29 @@ function isSensitiveKey(key: string): boolean {
   );
 }
 
+const SENSITIVE_PREVIEW_KEY_SEGMENTS = [
+  "raw_body",
+  "request_body",
+  "response_body",
+  "raw_request_body",
+  "raw_response_body",
+  "request_body_preview",
+  "response_body_preview",
+  "body_preview",
+  "response_preview",
+] as const;
+
+function isSensitivePreviewKey(key: string): boolean {
+  const normalized = normalizeKey(key);
+  return SENSITIVE_PREVIEW_KEY_SEGMENTS.some(
+    (candidate) =>
+      normalized === candidate ||
+      normalized.startsWith(`${candidate}_`) ||
+      normalized.endsWith(`_${candidate}`) ||
+      normalized.includes(`_${candidate}_`),
+  );
+}
+
 export function redactSensitiveData<T>(value: T): T {
   if (Array.isArray(value)) {
     return value.map((item) => redactSensitiveData(item)) as T;
@@ -51,7 +78,9 @@ export function redactSensitiveData<T>(value: T): T {
     return Object.fromEntries(
       Object.entries(value).map(([key, candidate]) => [
         key,
-        isSensitiveKey(key) ? REDACTION_PLACEHOLDER : redactSensitiveData(candidate),
+        isSensitiveKey(key) || isSensitivePreviewKey(key)
+          ? REDACTION_PLACEHOLDER
+          : redactSensitiveData(candidate),
       ]),
     ) as T;
   }

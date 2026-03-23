@@ -5,6 +5,7 @@ import { signOut } from "next-auth/react";
 import { Camera, Loader2, ShieldCheck, Trash2, UploadCloud } from "lucide-react";
 import { toast } from "sonner";
 import { FormStatusMessage } from "@/app/components/a11y/form-status-message";
+import { PasskeySettingsCard } from "@/app/components/profile/passkey-settings-card";
 import { Avatar } from "@/app/components/ui/avatar";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
@@ -82,6 +83,7 @@ export function ProfileSettingsClient({
   const [deletingAccount, setDeletingAccount] = useState(false);
   const [deleteEmail, setDeleteEmail] = useState(fallbackUser.email ?? "");
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [profileUserId, setProfileUserId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{
     tone: "error" | "success" | "info";
     message: string;
@@ -111,6 +113,7 @@ export function ProfileSettingsClient({
         }
 
         setForm(toFormState(payload, fallbackUser));
+        setProfileUserId(payload.user.id);
         setFeedback({
           tone: "info",
           message: "Profile loaded. Review your details and save any updates.",
@@ -184,6 +187,7 @@ export function ProfileSettingsClient({
         ...toFormState(payload, fallbackUser),
         newPassword: "",
       }));
+      setProfileUserId(payload.user.id);
       setProfile({
         name: payload.user.name,
         email: payload.user.email,
@@ -523,6 +527,12 @@ export function ProfileSettingsClient({
         </div>
 
         <div className="space-y-8">
+          <PasskeySettingsCard
+            userId={profileUserId}
+            userName={form.name}
+            userEmail={form.email}
+          />
+
           <section className="glass-panel rounded-[1.75rem] p-6 sm:p-8">
             <p className="label-caps">Workspace context</p>
             <div className="mt-5 grid gap-4">

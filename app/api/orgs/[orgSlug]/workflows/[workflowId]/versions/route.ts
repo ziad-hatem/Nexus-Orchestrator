@@ -13,10 +13,19 @@ type RouteContext = {
   params: Promise<{ orgSlug: string; workflowId: string }>;
 };
 
+export const workflowVersionsRouteDeps = {
+  auth,
+  createRequestLogger,
+  handleRouteError,
+  getApiOrgAccess,
+  canViewWorkflows,
+  listWorkflowVersions,
+};
+
 export async function GET(req: Request, { params }: RouteContext) {
-  const session = await auth();
+  const session = await workflowVersionsRouteDeps.auth();
   const { orgSlug, workflowId } = await params;
-  const logger = createRequestLogger(req, {
+  const logger = workflowVersionsRouteDeps.createRequestLogger(req, {
     route: "api.orgs.workflows.versions.get",
     organizationSlug: orgSlug,
     workflowId,
@@ -24,7 +33,7 @@ export async function GET(req: Request, { params }: RouteContext) {
   });
 
   try {
-    const access = await getApiOrgAccess({
+    const access = await workflowVersionsRouteDeps.getApiOrgAccess({
       orgSlug,
       userId: session?.user?.id,
     });
@@ -32,11 +41,11 @@ export async function GET(req: Request, { params }: RouteContext) {
     if (!access.ok) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
-    if (!canViewWorkflows(access.context.membership.role)) {
+    if (!workflowVersionsRouteDeps.canViewWorkflows(access.context.membership.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const versions = await listWorkflowVersions({
+    const versions = await workflowVersionsRouteDeps.listWorkflowVersions({
       organizationId: access.context.organization.id,
       workflowId,
     });
@@ -46,7 +55,7 @@ export async function GET(req: Request, { params }: RouteContext) {
     const message =
       error instanceof Error ? error.message : "Failed to load workflow versions";
     const status = error instanceof WorkflowNotFoundError ? 404 : 500;
-    return handleRouteError(error, {
+    return workflowVersionsRouteDeps.handleRouteError(error, {
       request: req,
       logger,
       fallbackMessage: "Failed to load workflow versions",

@@ -21,10 +21,51 @@ type WorkflowVersionLookupRow = {
 };
 
 const TRIGGER_BINDING_SELECT =
-  "id, organization_id, workflow_id, workflow_version_id, source_type, match_key, config_snapshot, secret_hash, secret_last_four, secret_rotated_at, secret_last_used_at, is_active, created_by, updated_by, created_at, updated_at";
+  "*";
+
+export const triggerRepositoryDeps = {
+  createSupabaseAdminClient,
+};
+
+function isMissingTriggerBindingSecurityColumnError(message: string): boolean {
+  return (
+    message.includes(
+      "Could not find the 'secret_last_used_at' column of 'workflow_trigger_bindings' in the schema cache",
+    ) ||
+    message.includes(
+      "Could not find the 'secret_rotated_at' column of 'workflow_trigger_bindings' in the schema cache",
+    ) ||
+    message.includes("workflow_trigger_bindings.secret_last_used_at") ||
+    message.includes("workflow_trigger_bindings.secret_rotated_at")
+  );
+}
+
+function normalizeTriggerBindingRow(row: Record<string, unknown>): TriggerBindingRow {
+  return {
+    id: String(row.id),
+    organization_id: String(row.organization_id),
+    workflow_id: String(row.workflow_id),
+    workflow_version_id: String(row.workflow_version_id),
+    source_type: row.source_type as TriggerBindingRow["source_type"],
+    match_key: String(row.match_key),
+    config_snapshot: row.config_snapshot ?? {},
+    secret_hash: typeof row.secret_hash === "string" ? row.secret_hash : null,
+    secret_last_four:
+      typeof row.secret_last_four === "string" ? row.secret_last_four : null,
+    secret_rotated_at:
+      typeof row.secret_rotated_at === "string" ? row.secret_rotated_at : null,
+    secret_last_used_at:
+      typeof row.secret_last_used_at === "string" ? row.secret_last_used_at : null,
+    is_active: Boolean(row.is_active),
+    created_by: String(row.created_by),
+    updated_by: String(row.updated_by),
+    created_at: String(row.created_at),
+    updated_at: String(row.updated_at),
+  };
+}
 
 function getClient() {
-  return createSupabaseAdminClient();
+  return triggerRepositoryDeps.createSupabaseAdminClient();
 }
 
 export async function createTriggerBindingRow(params: {
@@ -39,26 +80,45 @@ export async function createTriggerBindingRow(params: {
   userId: string;
 }): Promise<TriggerBindingRow> {
   const supabase = getClient();
+  const baseInsert = {
+    organization_id: params.organizationId,
+    workflow_id: params.workflowDbId,
+    workflow_version_id: params.workflowVersionId,
+    source_type: params.sourceType,
+    match_key: params.matchKey,
+    config_snapshot: params.configSnapshot,
+    secret_hash: params.secretHash ?? null,
+    secret_last_four: params.secretLastFour ?? null,
+    is_active: true,
+    created_by: params.userId,
+    updated_by: params.userId,
+    updated_at: new Date().toISOString(),
+  };
   const { data, error } = await supabase
     .from("workflow_trigger_bindings")
     .insert({
-      organization_id: params.organizationId,
-      workflow_id: params.workflowDbId,
-      workflow_version_id: params.workflowVersionId,
-      source_type: params.sourceType,
-      match_key: params.matchKey,
-      config_snapshot: params.configSnapshot,
-      secret_hash: params.secretHash ?? null,
-      secret_last_four: params.secretLastFour ?? null,
+      ...baseInsert,
       secret_rotated_at: params.secretHash ? new Date().toISOString() : null,
       secret_last_used_at: null,
-      is_active: true,
-      created_by: params.userId,
-      updated_by: params.userId,
-      updated_at: new Date().toISOString(),
     })
     .select(TRIGGER_BINDING_SELECT)
-    .single<TriggerBindingRow>();
+    .single<Record<string, unknown>>();
+
+  if (error && isMissingTriggerBindingSecurityColumnError(error.message)) {
+    const legacyAttempt = await supabase
+      .from("workflow_trigger_bindings")
+      .insert(baseInsert)
+      .select(TRIGGER_BINDING_SELECT)
+      .single<Record<string, unknown>>();
+
+    if (legacyAttempt.error || !legacyAttempt.data) {
+      throw new Error(
+        `Failed to create workflow trigger binding: ${legacyAttempt.error?.message ?? "Unknown error"}`,
+      );
+    }
+
+    return normalizeTriggerBindingRow(legacyAttempt.data);
+  }
 
   if (error || !data) {
     throw new Error(
@@ -66,7 +126,7 @@ export async function createTriggerBindingRow(params: {
     );
   }
 
-  return data;
+  return normalizeTriggerBindingRow(data);
 }
 
 export async function deactivateTriggerBindingsForWorkflow(params: {
@@ -110,13 +170,13 @@ export async function getActiveTriggerBindingByWorkflowDbId(
     .select(TRIGGER_BINDING_SELECT)
     .eq("workflow_id", workflowDbId)
     .eq("is_active", true)
-    .maybeSingle<TriggerBindingRow>();
+    .maybeSingle<Record<string, unknown>>();
 
   if (error) {
     throw new Error(`Failed to load workflow trigger binding: ${error.message}`);
   }
 
-  return data ?? null;
+  return data ? normalizeTriggerBindingRow(data) : null;
 }
 
 export async function getActiveWebhookBindingByMatchKey(
@@ -129,13 +189,13 @@ export async function getActiveWebhookBindingByMatchKey(
     .eq("source_type", "webhook")
     .eq("match_key", matchKey)
     .eq("is_active", true)
-    .maybeSingle<TriggerBindingRow>();
+    .maybeSingle<Record<string, unknown>>();
 
   if (error) {
     throw new Error(`Failed to load webhook trigger binding: ${error.message}`);
   }
 
-  return data ?? null;
+  return data ? normalizeTriggerBindingRow(data) : null;
 }
 
 export async function getActiveManualBindingByWorkflowDbId(
@@ -148,13 +208,13 @@ export async function getActiveManualBindingByWorkflowDbId(
     .eq("workflow_id", workflowDbId)
     .eq("source_type", "manual")
     .eq("is_active", true)
-    .maybeSingle<TriggerBindingRow>();
+    .maybeSingle<Record<string, unknown>>();
 
   if (error) {
     throw new Error(`Failed to load manual trigger binding: ${error.message}`);
   }
 
-  return data ?? null;
+  return data ? normalizeTriggerBindingRow(data) : null;
 }
 
 export async function listActiveInternalEventBindings(
@@ -167,13 +227,13 @@ export async function listActiveInternalEventBindings(
     .eq("source_type", "internal_event")
     .eq("match_key", eventKey)
     .eq("is_active", true)
-    .returns<TriggerBindingRow[]>();
+    .returns<Record<string, unknown>[]>();
 
   if (error) {
     throw new Error(`Failed to load internal event bindings: ${error.message}`);
   }
 
-  return data ?? [];
+  return (data ?? []).map(normalizeTriggerBindingRow);
 }
 
 export async function updateTriggerBindingSecret(params: {
@@ -183,19 +243,39 @@ export async function updateTriggerBindingSecret(params: {
   userId: string;
 }): Promise<TriggerBindingRow> {
   const supabase = getClient();
+  const baseUpdate = {
+    secret_hash: params.secretHash,
+    secret_last_four: params.secretLastFour,
+    updated_by: params.userId,
+    updated_at: new Date().toISOString(),
+  };
   const { data, error } = await supabase
     .from("workflow_trigger_bindings")
     .update({
-      secret_hash: params.secretHash,
-      secret_last_four: params.secretLastFour,
+      ...baseUpdate,
       secret_rotated_at: new Date().toISOString(),
       secret_last_used_at: null,
-      updated_by: params.userId,
-      updated_at: new Date().toISOString(),
     })
     .eq("id", params.bindingId)
     .select(TRIGGER_BINDING_SELECT)
-    .single<TriggerBindingRow>();
+    .single<Record<string, unknown>>();
+
+  if (error && isMissingTriggerBindingSecurityColumnError(error.message)) {
+    const legacyAttempt = await supabase
+      .from("workflow_trigger_bindings")
+      .update(baseUpdate)
+      .eq("id", params.bindingId)
+      .select(TRIGGER_BINDING_SELECT)
+      .single<Record<string, unknown>>();
+
+    if (legacyAttempt.error || !legacyAttempt.data) {
+      throw new Error(
+        `Failed to rotate webhook API key: ${legacyAttempt.error?.message ?? "Unknown error"}`,
+      );
+    }
+
+    return normalizeTriggerBindingRow(legacyAttempt.data);
+  }
 
   if (error || !data) {
     throw new Error(
@@ -203,7 +283,7 @@ export async function updateTriggerBindingSecret(params: {
     );
   }
 
-  return data;
+  return normalizeTriggerBindingRow(data);
 }
 
 export async function markTriggerBindingSecretUsed(bindingId: string): Promise<void> {
@@ -215,6 +295,10 @@ export async function markTriggerBindingSecretUsed(bindingId: string): Promise<v
       updated_at: new Date().toISOString(),
     })
     .eq("id", bindingId);
+
+  if (error && isMissingTriggerBindingSecurityColumnError(error.message)) {
+    return;
+  }
 
   if (error) {
     throw new Error(`Failed to update webhook API key usage: ${error.message}`);

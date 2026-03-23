@@ -17,13 +17,18 @@ import {
 } from "@/lib/server/actions/templating";
 import { isSafeWorkflowRecordFieldKey } from "@/lib/server/validation";
 
+export const recordActionDeps = {
+  upsertWorkflowRecordField,
+};
+
 function buildLog(
   message: string,
   data?: Record<string, unknown>,
+  level: "info" | "error" = "info",
 ): { at: string; level: "info" | "error"; message: string; data?: Record<string, unknown> } {
   return {
     at: new Date().toISOString(),
-    level: "info",
+    level,
     message,
     data,
   };
@@ -36,7 +41,7 @@ function buildContext(sourceContext: WorkflowSourceContext, payload: Record<stri
   };
 }
 
-function coerceRecordValue(params: {
+export function coerceRecordValue(params: {
   valueType: WorkflowRecordValueType;
   rendered: unknown;
 }): unknown {
@@ -86,6 +91,10 @@ function coerceRecordValue(params: {
     }
     case "string":
     default:
+      if (typeof params.rendered === "undefined") {
+        return "";
+      }
+
       return typeof params.rendered === "string"
         ? params.rendered
         : JSON.stringify(params.rendered);
@@ -150,7 +159,7 @@ export async function executeUpdateRecordFieldAction(params: {
       return {
         classification: "fatal_failure",
         output: {},
-        logs: [buildLog("Record action resolved an empty record identity.")],
+        logs: [buildLog("Record action resolved an empty record identity.", undefined, "error")],
         errorCode: "missing_record_identity",
         errorMessage: "Record action requires both record type and record key.",
       };
@@ -160,7 +169,13 @@ export async function executeUpdateRecordFieldAction(params: {
       return {
         classification: "fatal_failure",
         output: {},
-        logs: [buildLog("Record action resolved an unsafe field key.", { field })],
+        logs: [
+          buildLog(
+            "Record action resolved an unsafe field key.",
+            { field },
+            "error",
+          ),
+        ],
         errorCode: "invalid_record_field",
         errorMessage: "Record action resolved an unsafe field key.",
       };
@@ -171,7 +186,7 @@ export async function executeUpdateRecordFieldAction(params: {
       rendered: renderedValue,
     });
 
-    const record = await upsertWorkflowRecordField({
+    const record = await recordActionDeps.upsertWorkflowRecordField({
       organizationId: params.context.organizationId,
       workflowId: params.context.workflowId,
       workflowVersionId: params.context.workflowVersionId,
@@ -210,7 +225,7 @@ export async function executeUpdateRecordFieldAction(params: {
       logs: [
         buildLog("Record action failed.", {
           message: error instanceof Error ? error.message : "Unknown error",
-        }),
+        }, "error"),
       ],
       errorCode:
         error instanceof TemplateRenderError

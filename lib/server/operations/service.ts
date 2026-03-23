@@ -22,6 +22,15 @@ import type {
   WorkflowRunStatus,
 } from "@/lib/server/workflows/types";
 
+export const operationsServiceDeps = {
+  getOptionalEnv,
+  emitOperationalAlert,
+  evaluateOperationalAlerts,
+  getOperationsAlertLookbackMinutes,
+  getOperationsStaleRunAlertSeconds,
+  getOperationsRepositorySnapshot,
+};
+
 function parsePositiveInteger(value: string | null, fallback: number): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) {
@@ -91,7 +100,7 @@ export function buildRunSummaryFromRows(
 export function buildWebhookMetrics(
   events: WorkflowIngestionEventRow[],
   now = new Date(),
-  lookbackMinutes = getOperationsAlertLookbackMinutes(),
+  lookbackMinutes = operationsServiceDeps.getOperationsAlertLookbackMinutes(),
 ): OperationsWebhookMetrics {
   const relevant = events.filter(
     (event) =>
@@ -117,7 +126,7 @@ export function buildQueueSnapshot(params: {
 }): OperationsQueueSnapshot {
   const now = params.now ?? new Date();
   const staleThresholdSeconds =
-    params.staleRunAlertSeconds ?? getOperationsStaleRunAlertSeconds();
+    params.staleRunAlertSeconds ?? operationsServiceDeps.getOperationsStaleRunAlertSeconds();
   const staleRunningCount = params.runs.filter((run) => {
     if (run.status !== "running") {
       return false;
@@ -146,13 +155,16 @@ export function buildQueueSnapshot(params: {
 
 export function buildRetentionSummary(): OperationsRetentionSummary {
   return {
-    auditLogDays: parsePositiveInteger(getOptionalEnv("AUDIT_LOG_RETENTION_DAYS"), 365),
+    auditLogDays: parsePositiveInteger(
+      operationsServiceDeps.getOptionalEnv("AUDIT_LOG_RETENTION_DAYS"),
+      365,
+    ),
     executionLogDays: parsePositiveInteger(
-      getOptionalEnv("EXECUTION_LOG_RETENTION_DAYS"),
+      operationsServiceDeps.getOptionalEnv("EXECUTION_LOG_RETENTION_DAYS"),
       90,
     ),
     ingestionEventDays: parsePositiveInteger(
-      getOptionalEnv("INGESTION_EVENT_RETENTION_DAYS"),
+      operationsServiceDeps.getOptionalEnv("INGESTION_EVENT_RETENTION_DAYS"),
       30,
     ),
     dryRunCommand: "npm run retention:prune:dry-run",
@@ -173,7 +185,9 @@ export function buildOperationsChecklist(params: {
     "UPSTASH_REDIS_REST_TOKEN",
     "WEBHOOK_MAX_BODY_BYTES",
   ];
-  const missingEnvs = requiredEnvNames.filter((name) => !getOptionalEnv(name));
+  const missingEnvs = requiredEnvNames.filter(
+    (name) => !operationsServiceDeps.getOptionalEnv(name),
+  );
   const criticalAlerts = params.alerts.filter((alert) => alert.status === "critical");
 
   return [
@@ -240,8 +254,10 @@ export async function getOperationsDashboardData(params: {
   emitAlerts?: boolean;
 }): Promise<OperationsDashboardData> {
   const now = new Date();
-  const lookbackMinutes = getOperationsAlertLookbackMinutes();
-  const snapshot = await getOperationsRepositorySnapshot(params.organizationId);
+  const lookbackMinutes = operationsServiceDeps.getOperationsAlertLookbackMinutes();
+  const snapshot = await operationsServiceDeps.getOperationsRepositorySnapshot(
+    params.organizationId,
+  );
   const runSummary = buildRunSummaryFromRows(snapshot.runs);
   const queue = buildQueueSnapshot({
     runs: snapshot.runs,
@@ -256,7 +272,7 @@ export async function getOperationsDashboardData(params: {
       run.attempt_count >= run.max_attempts &&
       isWithinLookback(run.completed_at, now, lookbackMinutes),
   ).length;
-  const alerts = evaluateOperationalAlerts({
+  const alerts = operationsServiceDeps.evaluateOperationalAlerts({
     queueBacklog: queue.totalBacklog,
     staleRunningCount: queue.staleRunningCount,
     recentWebhookRejections: webhookMetrics.rejected,
@@ -277,7 +293,7 @@ export async function getOperationsDashboardData(params: {
         continue;
       }
 
-      emitOperationalAlert({
+      operationsServiceDeps.emitOperationalAlert({
         alert,
         context: {
           organizationId: params.organizationId,

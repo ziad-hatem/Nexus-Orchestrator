@@ -15,10 +15,20 @@ type RouteContext = {
   params: Promise<{ orgSlug: string; workflowId: string }>;
 };
 
+export const webhookSecretRouteDeps = {
+  auth,
+  createRequestLogger,
+  handleRouteError,
+  getApiOrgAccess,
+  canEditWorkflows,
+  regenerateWebhookSecretSchema,
+  regenerateWorkflowWebhookSecret,
+};
+
 export async function POST(req: Request, { params }: RouteContext) {
-  const session = await auth();
+  const session = await webhookSecretRouteDeps.auth();
   const { orgSlug, workflowId } = await params;
-  const logger = createRequestLogger(req, {
+  const logger = webhookSecretRouteDeps.createRequestLogger(req, {
     route: "api.orgs.workflows.trigger.webhook-secret.post",
     organizationSlug: orgSlug,
     workflowId,
@@ -27,12 +37,16 @@ export async function POST(req: Request, { params }: RouteContext) {
 
   let body: unknown = {};
   try {
-    body = await req.json();
+    const rawBody = await req.text();
+    body = rawBody.trim() ? JSON.parse(rawBody) : {};
   } catch {
-    body = {};
+    return NextResponse.json(
+      { error: "Invalid webhook API key regeneration payload" },
+      { status: 400 },
+    );
   }
 
-  const parsed = regenerateWebhookSecretSchema.safeParse(body);
+  const parsed = webhookSecretRouteDeps.regenerateWebhookSecretSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
       {
@@ -45,7 +59,7 @@ export async function POST(req: Request, { params }: RouteContext) {
   }
 
   try {
-    const access = await getApiOrgAccess({
+    const access = await webhookSecretRouteDeps.getApiOrgAccess({
       orgSlug,
       userId: session?.user?.id,
     });
@@ -53,11 +67,11 @@ export async function POST(req: Request, { params }: RouteContext) {
     if (!access.ok) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
-    if (!canEditWorkflows(access.context.membership.role)) {
+    if (!webhookSecretRouteDeps.canEditWorkflows(access.context.membership.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const result = await regenerateWorkflowWebhookSecret({
+    const result = await webhookSecretRouteDeps.regenerateWorkflowWebhookSecret({
       organizationId: access.context.organization.id,
       workflowId,
       userId: access.context.userId,
@@ -73,7 +87,7 @@ export async function POST(req: Request, { params }: RouteContext) {
       return NextResponse.json({ error: error.message }, { status: 409 });
     }
 
-    return handleRouteError(error, {
+    return webhookSecretRouteDeps.handleRouteError(error, {
       request: req,
       logger,
       fallbackMessage: "Failed to regenerate webhook API key",

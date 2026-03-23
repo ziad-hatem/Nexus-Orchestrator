@@ -4,6 +4,12 @@ import {
   redactSensitiveData,
 } from "@/lib/observability/redaction";
 
+export const errorTrackingDeps = {
+  sentry: Sentry,
+  redactRecord,
+  redactSensitiveData,
+};
+
 export type MonitoringContext = {
   requestId?: string | null;
   route?: string | null;
@@ -30,6 +36,10 @@ function toError(error: unknown, fallbackMessage: string): Error {
   }
 
   return new Error(fallbackMessage);
+}
+
+function redactNamedValue(key: string, value: unknown): unknown {
+  return errorTrackingDeps.redactSensitiveData({ [key]: value })[key];
 }
 
 function applyScopeContext(
@@ -80,7 +90,7 @@ function applyScopeContext(
   };
 
   if (Object.values(requestContext).some(Boolean)) {
-    scope.setContext("request", redactRecord(requestContext));
+    scope.setContext("request", errorTrackingDeps.redactRecord(requestContext));
   }
 
   const organizationContext = {
@@ -91,7 +101,7 @@ function applyScopeContext(
   };
 
   if (Object.values(organizationContext).some(Boolean)) {
-    scope.setContext("organization", redactRecord(organizationContext));
+    scope.setContext("organization", errorTrackingDeps.redactRecord(organizationContext));
   }
 
   const executionContext = {
@@ -103,7 +113,7 @@ function applyScopeContext(
   };
 
   if (Object.values(executionContext).some(Boolean)) {
-    scope.setContext("execution", redactRecord(executionContext));
+    scope.setContext("execution", errorTrackingDeps.redactRecord(executionContext));
   }
 
   const reservedKeys = new Set([
@@ -125,7 +135,7 @@ function applyScopeContext(
 
   for (const [key, value] of Object.entries(context)) {
     if (!reservedKeys.has(key) && typeof value !== "undefined") {
-      scope.setExtra(key, redactSensitiveData(value));
+      scope.setExtra(key, redactNamedValue(key, value));
     }
   }
 }
@@ -136,7 +146,7 @@ export function applyMonitoringContext(context?: MonitoringContext): void {
   }
 
   if (context.userId) {
-    Sentry.setUser({
+    errorTrackingDeps.sentry.setUser({
       id: context.userId ?? undefined,
     });
   }
@@ -156,7 +166,7 @@ export function applyMonitoringContext(context?: MonitoringContext): void {
 
   for (const [key, value] of tagEntries) {
     if (typeof value === "string" && value.length > 0) {
-      Sentry.setTag(key, value);
+      errorTrackingDeps.sentry.setTag(key, value);
     }
   }
 
@@ -168,7 +178,10 @@ export function applyMonitoringContext(context?: MonitoringContext): void {
   };
 
   if (Object.values(organizationContext).some(Boolean)) {
-    Sentry.setContext("organization", redactRecord(organizationContext));
+    errorTrackingDeps.sentry.setContext(
+      "organization",
+      errorTrackingDeps.redactRecord(organizationContext),
+    );
   }
 
   const executionContext = {
@@ -180,7 +193,10 @@ export function applyMonitoringContext(context?: MonitoringContext): void {
   };
 
   if (Object.values(executionContext).some(Boolean)) {
-    Sentry.setContext("execution", redactRecord(executionContext));
+    errorTrackingDeps.sentry.setContext(
+      "execution",
+      errorTrackingDeps.redactRecord(executionContext),
+    );
   }
 }
 
@@ -196,7 +212,7 @@ export function captureServerException(
 ): string {
   const err = toError(error, options?.fallbackMessage ?? "Unexpected server error");
 
-  return Sentry.withScope((scope) => {
+  return errorTrackingDeps.sentry.withScope((scope) => {
     applyScopeContext(scope, options?.context);
 
     if (options?.level) {
@@ -210,12 +226,12 @@ export function captureServerException(
     if (options?.extras) {
       for (const [key, value] of Object.entries(options.extras)) {
         if (typeof value !== "undefined") {
-          scope.setExtra(key, redactSensitiveData(value));
+          scope.setExtra(key, redactNamedValue(key, value));
         }
       }
     }
 
-    return Sentry.captureException(err);
+    return errorTrackingDeps.sentry.captureException(err);
   });
 }
 
@@ -224,19 +240,19 @@ export function captureServerLog(
   message: string,
   attributes?: Record<string, unknown>,
 ): void {
-  const payload = attributes ? redactRecord(attributes) : undefined;
+  const payload = attributes ? errorTrackingDeps.redactRecord(attributes) : undefined;
 
   if (level === "info") {
-    Sentry.logger.info(message, payload);
+    errorTrackingDeps.sentry.logger.info(message, payload);
     return;
   }
 
   if (level === "warn") {
-    Sentry.logger.warn(message, payload);
+    errorTrackingDeps.sentry.logger.warn(message, payload);
     return;
   }
 
-  Sentry.logger.error(message, payload);
+  errorTrackingDeps.sentry.logger.error(message, payload);
 }
 
 export function captureServerMessage(
@@ -248,7 +264,7 @@ export function captureServerMessage(
     fingerprint?: string[];
   },
 ): string {
-  return Sentry.withScope((scope) => {
+  return errorTrackingDeps.sentry.withScope((scope) => {
     applyScopeContext(scope, options?.context);
 
     if (options?.level) {
@@ -262,11 +278,14 @@ export function captureServerMessage(
     if (options?.extras) {
       for (const [key, value] of Object.entries(options.extras)) {
         if (typeof value !== "undefined") {
-          scope.setExtra(key, redactSensitiveData(value));
+          scope.setExtra(key, redactNamedValue(key, value));
         }
       }
     }
 
-    return Sentry.captureMessage(message, options?.level ?? "warning");
+    return errorTrackingDeps.sentry.captureMessage(
+      message,
+      options?.level ?? "warning",
+    );
   });
 }

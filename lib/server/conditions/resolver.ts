@@ -4,6 +4,13 @@ import type {
 } from "@/lib/server/workflows/types";
 
 export const CONDITION_RESOLVER_PATH_PATTERN = /^[A-Za-z0-9_.-]+$/;
+export const CONDITION_RESOLVER_SEGMENT_PATTERN = /^[A-Za-z0-9_-]+$/;
+
+const RESERVED_CONDITION_RESOLVER_SEGMENTS = new Set([
+  "__proto__",
+  "constructor",
+  "prototype",
+]);
 
 export type ConditionFieldResolution = {
   found: boolean;
@@ -19,7 +26,17 @@ function toRecord(value: unknown): Record<string, unknown> {
 }
 
 export function isValidConditionResolverPath(path: string): boolean {
-  return CONDITION_RESOLVER_PATH_PATTERN.test(path.trim());
+  const normalized = path.trim();
+  if (!normalized || !CONDITION_RESOLVER_PATH_PATTERN.test(normalized)) {
+    return false;
+  }
+
+  return normalized.split(".").every(
+    (segment) =>
+      Boolean(segment) &&
+      CONDITION_RESOLVER_SEGMENT_PATTERN.test(segment) &&
+      !RESERVED_CONDITION_RESOLVER_SEGMENTS.has(segment),
+  );
 }
 
 export function resolveConditionField(params: {
@@ -43,8 +60,13 @@ export function resolveConditionField(params: {
       : toRecord(params.context as unknown);
 
   let current: unknown = root;
-  for (const segment of path.split(".").filter(Boolean)) {
+  for (const segment of path.split(".")) {
     if (current === null || typeof current !== "object") {
+      current = undefined;
+      break;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(current, segment)) {
       current = undefined;
       break;
     }
