@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   executionWorkerDeps,
+  runExecutionWorkerCycle,
   startExecutionWorker,
 } from "@/lib/server/executions/worker";
 import { restoreMutableExports } from "@/tests/helpers/test-utils";
@@ -122,4 +123,52 @@ test("worker once mode rethrows processing failures after logging them", async (
     () => startExecutionWorker({ once: true }),
     /worker failure/,
   );
+});
+
+test("worker cycle can process multiple jobs in one batch without throwing on per-job failures", async () => {
+  const processedJobs: string[] = [];
+  const jobs = [
+    {
+      runDbId: "run_db_1",
+      organizationId: "org_1",
+      runKey: "RUN-1001",
+      correlationId: "corr_1",
+      enqueuedAt: "2026-03-23T00:00:00.000Z",
+      reason: "trigger" as const,
+    },
+    {
+      runDbId: "run_db_2",
+      organizationId: "org_1",
+      runKey: "RUN-1002",
+      correlationId: "corr_2",
+      enqueuedAt: "2026-03-23T00:00:00.000Z",
+      reason: "retry" as const,
+    },
+    null,
+  ];
+
+  executionWorkerDeps.drainDueExecutionJobs = async () => 2;
+  executionWorkerDeps.getExecutionQueueBacklog = async () => ({
+    ready: 2,
+    delayed: 1,
+  });
+  executionWorkerDeps.popExecutionJob = async () => jobs.shift() ?? null;
+  executionWorkerDeps.processExecutionQueueJob = async (job) => {
+    processedJobs.push(job.runDbId);
+    if (job.runDbId === "run_db_1") {
+      throw new Error("first failure");
+    }
+  };
+  executionWorkerDeps.appLogger = createLogger() as never;
+  executionWorkerDeps.evaluateOperationalAlerts = () => [];
+  executionWorkerDeps.emitOperationalAlert = () => null;
+
+  const result = await runExecutionWorkerCycle({
+    maxJobs: 3,
+    rethrowOnError: false,
+  });
+
+  assert.equal(result.movedDelayedJobs, 2);
+  assert.equal(result.processedJobs, 2);
+  assert.deepEqual(processedJobs, ["run_db_1", "run_db_2"]);
 });

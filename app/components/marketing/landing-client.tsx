@@ -7,12 +7,9 @@ import {
   ShieldCheck,
   Database,
   Terminal,
-  PlayCircle,
   Quote,
-  Menu,
-  X,
 } from "lucide-react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
 
 const WordReveal = ({
@@ -20,13 +17,28 @@ const WordReveal = ({
   delay = 0,
   className = "",
   wordClassName = "",
+  disabled = false,
 }: {
   text: string;
   delay?: number;
   className?: string;
   wordClassName?: string;
+  disabled?: boolean;
 }) => {
   const words = text.split(" ");
+
+  if (disabled) {
+    return (
+      <span className={`inline-block ${className}`}>
+        {words.map((word, i) => (
+          <span key={i} className={`inline-block mr-[0.25em] ${wordClassName}`}>
+            {word}
+          </span>
+        ))}
+      </span>
+    );
+  }
+
   return (
     <span className={`inline-block ${className}`}>
       {words.map((word, i) => (
@@ -52,16 +64,78 @@ const WordReveal = ({
   );
 };
 
-// --- Components ---
+function useLandingPerformanceMode() {
+  const prefersReducedMotion = useReducedMotion();
+  const [isConstrained, setIsConstrained] = useState(false);
 
-const Navbar = () => {
+  useEffect(() => {
+    const update = () => {
+      const nav = navigator as Navigator & {
+        connection?: { saveData?: boolean };
+        deviceMemory?: number;
+      };
+      const isMobileViewport = window.matchMedia("(max-width: 767px)").matches;
+      const hasCoarsePointer = window.matchMedia("(pointer: coarse)").matches;
+      const saveData =
+        typeof nav.connection === "object" &&
+        nav.connection &&
+        "saveData" in nav.connection
+          ? Boolean(nav.connection.saveData)
+          : false;
+      const deviceMemory =
+        typeof nav.deviceMemory === "number"
+          ? nav.deviceMemory
+          : null;
+      const lowCoreCount =
+        typeof navigator.hardwareConcurrency === "number" &&
+        navigator.hardwareConcurrency > 0 &&
+        navigator.hardwareConcurrency <= 4;
+
+      setIsConstrained(
+        isMobileViewport ||
+          hasCoarsePointer ||
+          saveData ||
+          (deviceMemory !== null && deviceMemory <= 4) ||
+          lowCoreCount,
+      );
+    };
+
+    update();
+    window.addEventListener("resize", update, { passive: true });
+    return () => window.removeEventListener("resize", update);
+  }, []);
+
+  return {
+    reducedMotion: prefersReducedMotion,
+    constrainedMotion: prefersReducedMotion || isConstrained,
+  };
+}
+
+const Navbar = ({ constrainedMotion }: { constrainedMotion: boolean }) => {
   const [isScrolled, setIsScrolled] = useState(false);
 
   useEffect(() => {
-    const handleScroll = () => setIsScrolled(window.scrollY > 20);
+    if (constrainedMotion) {
+      setIsScrolled(true);
+      return;
+    }
+
+    let ticking = false;
+    const handleScroll = () => {
+      if (ticking) {
+        return;
+      }
+
+      ticking = true;
+      window.requestAnimationFrame(() => {
+        setIsScrolled(window.scrollY > 20);
+        ticking = false;
+      });
+    };
+
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
+  }, [constrainedMotion]);
 
   return (
     <nav
@@ -96,32 +170,51 @@ const Navbar = () => {
   );
 };
 
-const Hero = () => (
+const Hero = ({ constrainedMotion }: { constrainedMotion: boolean }) => (
   <section className="relative min-h-screen flex items-center pt-20 overflow-hidden">
     <div className="absolute inset-0 z-0">
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[120%] h-[120%] opacity-10 pointer-events-none">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,var(--color-primary)_0%,transparent_70%)] blur-[120px]" />
+      <div
+        className={`absolute top-0 left-1/2 -translate-x-1/2 pointer-events-none opacity-10 ${
+          constrainedMotion ? "h-full w-full" : "h-[120%] w-[120%]"
+        }`}
+      >
+        <div
+          className={`absolute inset-0 bg-[radial-gradient(circle_at_center,var(--color-primary)_0%,transparent_70%)] ${
+            constrainedMotion ? "blur-[56px]" : "blur-[120px]"
+          }`}
+        />
       </div>
       <div className="absolute inset-0 bg-linear-to-b from-transparent via-surface/50 to-surface" />
     </div>
 
     <div className="relative z-10 max-w-7xl mx-auto px-6 w-full">
       <div className="max-w-4xl">
-        <motion.span
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="inline-block px-4 py-1.5 mb-8 text-[10px] font-bold tracking-[0.2em] uppercase bg-surface-container-high text-primary rounded-full"
-        >
-          Enterprise Automation OS
-        </motion.span>
+        {constrainedMotion ? (
+          <span className="inline-block px-4 py-1.5 mb-8 text-[10px] font-bold tracking-[0.2em] uppercase bg-surface-container-high text-primary rounded-full">
+            Enterprise Automation OS
+          </span>
+        ) : (
+          <motion.span
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            className="inline-block px-4 py-1.5 mb-8 text-[10px] font-bold tracking-[0.2em] uppercase bg-surface-container-high text-primary rounded-full"
+          >
+            Enterprise Automation OS
+          </motion.span>
+        )}
         <h1 className="text-6xl md:text-8xl font-black tracking-tight leading-none mb-8 text-on-surface">
-          <WordReveal text="Architecting the Future of" delay={0.2} />
+          <WordReveal
+            text="Architecting the Future of"
+            delay={0.2}
+            disabled={constrainedMotion}
+          />
           <br className="hidden md:block" />
           <WordReveal
             text="Nexus Orchestrator"
             delay={0.2 + 4 * 0.08}
             wordClassName="text-gradient"
+            disabled={constrainedMotion}
           />
         </h1>
         <div className="mb-12 max-w-2xl">
@@ -129,21 +222,33 @@ const Hero = () => (
             text="Scale operations globally with high-performance multi-tenancy, sophisticated visual orchestration, and military-grade isolation."
             delay={0.8}
             className="text-xl md:text-2xl text-on-surface-variant leading-relaxed"
+            disabled={constrainedMotion}
           />
         </div>
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 1.8 }}
-          className="flex flex-wrap gap-4"
-        >
-          <Link
-            href="/register"
-            className="premium-gradient text-(--on-primary) px-8 py-4 rounded-xl font-bold text-lg shadow-[0_12px_28px_rgba(0,95,158,0.18)] hover:scale-105 transition-transform active:scale-95 inline-block"
+        {constrainedMotion ? (
+          <div className="flex flex-wrap gap-4">
+            <Link
+              href="/register"
+              className="premium-gradient text-(--on-primary) px-8 py-4 rounded-xl font-bold text-lg shadow-[0_12px_28px_rgba(0,95,158,0.18)] transition-opacity active:scale-95 inline-block"
+            >
+              Get Started
+            </Link>
+          </div>
+        ) : (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 1.8 }}
+            className="flex flex-wrap gap-4"
           >
-            Get Started
-          </Link>
-        </motion.div>
+            <Link
+              href="/register"
+              className="premium-gradient text-(--on-primary) px-8 py-4 rounded-xl font-bold text-lg shadow-[0_12px_28px_rgba(0,95,158,0.18)] hover:scale-105 transition-transform active:scale-95 inline-block"
+            >
+              Get Started
+            </Link>
+          </motion.div>
+        )}
       </div>
     </div>
   </section>
@@ -175,7 +280,7 @@ const TrustBar = () => (
   </section>
 );
 
-const Features = () => {
+const Features = ({ constrainedMotion }: { constrainedMotion: boolean }) => {
   const pillars = [
     {
       icon: <Network className="w-8 h-8" />,
@@ -200,8 +305,13 @@ const Features = () => {
         {pillars.map((p, i) => (
           <motion.div
             key={i}
-            whileHover={{ y: -10 }}
-            className="group bg-surface-container-lowest p-10 rounded-[2.5rem] border border-outline-variant/10 hover:bg-primary transition-all duration-500 ambient-shadow"
+            whileHover={constrainedMotion ? undefined : { y: -10 }}
+            transition={constrainedMotion ? { duration: 0 } : undefined}
+            className={`group bg-surface-container-lowest p-10 rounded-[2.5rem] border border-outline-variant/10 ambient-shadow ${
+              constrainedMotion
+                ? "transition-colors duration-200"
+                : "hover:bg-primary transition-all duration-500"
+            }`}
           >
             <div className="w-16 h-16 bg-surface-container-high rounded-2xl flex items-center justify-center mb-8 group-hover:bg-white/10 transition-colors">
               <div className="text-primary group-hover:text-white transition-colors">
@@ -268,6 +378,8 @@ const DeepDive = () => (
               src="https://picsum.photos/seed/nexus-ui/1200/800"
               alt="Nexus UI"
               className="rounded-4xl w-full object-cover aspect-video"
+              loading="lazy"
+              decoding="async"
               referrerPolicy="no-referrer"
             />
           </div>
@@ -330,6 +442,8 @@ const Testimonial = () => (
           src="https://picsum.photos/seed/marcus/200/200"
           alt="Marcus Chen"
           className="w-20 h-20 rounded-full mb-4 border-4 border-white shadow-lg"
+          loading="lazy"
+          decoding="async"
           referrerPolicy="no-referrer"
         />
         <div className="font-bold text-lg text-on-surface">Marcus Chen</div>
@@ -368,12 +482,14 @@ const Footer = () => (
 );
 
 export function LandingClient() {
+  const { constrainedMotion } = useLandingPerformanceMode();
+
   return (
     <div className="min-h-screen">
-      <Navbar />
-      <Hero />
+      <Navbar constrainedMotion={constrainedMotion} />
+      <Hero constrainedMotion={constrainedMotion} />
       <TrustBar />
-      <Features />
+      <Features constrainedMotion={constrainedMotion} />
       <DeepDive />
       <Stats />
       <Testimonial />
@@ -391,7 +507,11 @@ export function LandingClient() {
           <div className="flex flex-col sm:flex-row justify-center gap-4">
             <Link
               href="/register"
-              className="premium-gradient text-(--on-primary) px-10 py-5 rounded-xl font-black text-xl shadow-[0_12px_28px_rgba(0,95,158,0.18)] hover:scale-105 transition-transform active:scale-95 inline-block"
+              className={`premium-gradient text-(--on-primary) px-10 py-5 rounded-xl font-black text-xl shadow-[0_12px_28px_rgba(0,95,158,0.18)] active:scale-95 inline-block ${
+                constrainedMotion
+                  ? "transition-opacity"
+                  : "hover:scale-105 transition-transform"
+              }`}
             >
               Start Free Trial
             </Link>

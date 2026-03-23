@@ -1,0 +1,22 @@
+# *
+User-agent: *
+Allow: /
+
+# *
+User-agent: *
+Disallow: /api
+Disallow: /auth
+Disallow: /forgot-password
+Disallow: /hooks
+Disallow: /invite
+Disallow: /login
+Disallow: /org
+Disallow: /register
+Disallow: /reset-password
+Disallow: /verify
+
+# Host
+Host: http://localhost:3000
+
+# Sitemaps
+Sitemap: http://localhost:3000/sitemap.xml

@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "postbuild": "node scripts/generate-sitemap.mjs",
     "start": "next start",
+    "sitemap": "node scripts/generate-sitemap.mjs",
     "lint": "eslint",
     "test": "npm run test:security && npm run test:operations && npm run test:phase-one && npm run test:phase-two && npm run test:phase-three && npm run test:phase-four && npm run test:phase-five && npm run test:phase-six && npm run test:phase-seven && npm run test:phase-eight",
     "test:security": "tsx --test tests/security/*.test.ts",
@@ -63,6 +65,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.1",
+    "next-sitemap": "^4.2.3",
     "tailwindcss": "^4",
     "tsx": "^4.20.6",
     "typescript": "^5"
