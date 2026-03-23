@@ -37,7 +37,7 @@ function createWorkflowRow(overrides: Partial<WorkflowRow> = {}): WorkflowRow {
     name: "Incident triage",
     description: "Routes incidents",
     category: "Operations",
-    tags: ["ops"],
+    tags: ["nexus"],
     status: "draft_only",
     latest_published_version_number: null,
     created_by: "user_1",
@@ -50,7 +50,9 @@ function createWorkflowRow(overrides: Partial<WorkflowRow> = {}): WorkflowRow {
   };
 }
 
-function createDraftRow(overrides: Partial<WorkflowDraftRow> = {}): WorkflowDraftRow {
+function createDraftRow(
+  overrides: Partial<WorkflowDraftRow> = {},
+): WorkflowDraftRow {
   const baseDraft = createEmptyWorkflowDraftDocument({
     name: "Incident triage",
     description: "Routes incidents",
@@ -60,7 +62,7 @@ function createDraftRow(overrides: Partial<WorkflowDraftRow> = {}): WorkflowDraf
   const action = createWorkflowActionDefinition("send_email");
   action.label = "Send email";
   action.config = {
-    to: "ops@example.com",
+    to: "nexus@example.com",
     subject: "Workflow update",
     body: "A workflow step completed.",
     replyTo: "",
@@ -93,7 +95,9 @@ function createDraftRow(overrides: Partial<WorkflowDraftRow> = {}): WorkflowDraf
   };
 }
 
-function createVersionRow(overrides: Partial<WorkflowVersionRow> = {}): WorkflowVersionRow {
+function createVersionRow(
+  overrides: Partial<WorkflowVersionRow> = {},
+): WorkflowVersionRow {
   const draft = createDraftRow();
 
   return {
@@ -214,7 +218,8 @@ test("updateWorkflowDraft keeps production metadata stable while creating a publ
   let auditMetadata: unknown = null;
 
   workflowServiceDeps.getWorkflowRowByPublicId = async () => workflow;
-  workflowServiceDeps.getWorkflowDraftRowByWorkflowDbId = async () => currentDraft;
+  workflowServiceDeps.getWorkflowDraftRowByWorkflowDbId = async () =>
+    currentDraft;
   workflowServiceDeps.updateWorkflowDraftRow = async (params) =>
     createDraftRow({
       metadata: params.metadata,

@@ -1176,7 +1176,7 @@ export function WorkflowNodeInspector({
                       ),
                     })
                   }
-                  placeholder="ops@example.com or {{ payload.customerEmail }}"
+                  placeholder="nexus@example.com or {{ payload.customerEmail }}"
                   className="input-field border-0 shadow-none"
                 />
               </div>

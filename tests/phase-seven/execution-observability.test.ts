@@ -41,7 +41,7 @@ function createRunRow(overrides: Partial<WorkflowRunRow> = {}): WorkflowRunRow {
       sourceLabel: "manual",
       actorUserId: "user_trigger",
       requestIp: "198.51.100.20",
-      rawBody: "{\"token\":\"super-secret\"}",
+      rawBody: '{"token":"super-secret"}',
     },
     payload: {
       apiKey: "secret-token",
@@ -111,11 +111,11 @@ function createStepRow(
     status: "failed",
     correlation_id: "corr_1",
     input_payload: {
-      requestBodyPreview: "{\"password\":\"nope\"}",
+      requestBodyPreview: '{"password":"nope"}',
       safe: "visible",
     },
     output_payload: {
-      responsePreview: "{\"apiKey\":\"still-nope\"}",
+      responsePreview: '{"apiKey":"still-nope"}',
       safe: true,
     },
     error_code: "action_failure",
@@ -126,7 +126,7 @@ function createStepRow(
         level: "info",
         message: "Provider preview",
         data: {
-          requestBodyPreview: "{\"token\":\"hidden\"}",
+          requestBodyPreview: '{"token":"hidden"}',
           safe: "ok",
         },
       },
@@ -149,7 +149,7 @@ function createTerminalActionDraft(): WorkflowDraftDocument {
   const action = createWorkflowActionDefinition("send_email");
   action.label = "Notify team";
   action.config = {
-    to: "ops@example.com",
+    to: "nexus@example.com",
     subject: "Workflow update",
     body: "Workflow completed",
     replyTo: "",
@@ -205,7 +205,9 @@ test("getWorkflowRunDetail returns redacted payloads, step logs, and persisted a
       },
     ] as never;
   executionServiceDeps.listWorkflowVersionRowsByIds = async () =>
-    [{ id: "version_db_1", workflow_id: "workflow_db_1", version_number: 7 }] as never;
+    [
+      { id: "version_db_1", workflow_id: "workflow_db_1", version_number: 7 },
+    ] as never;
   executionServiceDeps.getWorkflowVersionRowById = async () => version;
   executionServiceDeps.listWorkflowRunStepRows = async () => [
     createStepRow(),
@@ -259,7 +261,10 @@ test("getWorkflowRunDetail returns redacted payloads, step logs, and persisted a
   assert.equal(detail.attempts.length, 2);
   assert.equal(detail.attempts[1]?.requestedBy?.email, "retry@example.com");
   assert.equal(detail.triggerActor?.name, "Trigger User");
-  assert.equal((detail.payload as { apiKey?: string }).apiKey, REDACTION_PLACEHOLDER);
+  assert.equal(
+    (detail.payload as { apiKey?: string }).apiKey,
+    REDACTION_PLACEHOLDER,
+  );
   assert.equal(detail.sourceContext.rawBody, REDACTION_PLACEHOLDER);
   assert.equal(
     detail.steps[0]?.inputPayload.requestBodyPreview,
@@ -312,7 +317,9 @@ test("getWorkflowRunDetail builds fallback attempt history when attempt rows are
       },
     ] as never;
   executionServiceDeps.listWorkflowVersionRowsByIds = async () =>
-    [{ id: "version_db_1", workflow_id: "workflow_db_1", version_number: 4 }] as never;
+    [
+      { id: "version_db_1", workflow_id: "workflow_db_1", version_number: 4 },
+    ] as never;
   executionServiceDeps.getWorkflowVersionRowById = async () => version;
   executionServiceDeps.listWorkflowRunStepRows = async () => [
     createStepRow({

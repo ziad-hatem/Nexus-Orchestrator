@@ -51,7 +51,10 @@ const originalWorkflowVersionRouteDeps = { ...workflowVersionRouteDeps };
 
 test.afterEach(() => {
   restoreMutableExports(workflowsRouteDeps, originalWorkflowsRouteDeps);
-  restoreMutableExports(workflowDetailRouteDeps, originalWorkflowDetailRouteDeps);
+  restoreMutableExports(
+    workflowDetailRouteDeps,
+    originalWorkflowDetailRouteDeps,
+  );
   restoreMutableExports(workflowDraftRouteDeps, originalWorkflowDraftRouteDeps);
   restoreMutableExports(
     workflowPublishRouteDeps,
@@ -149,7 +152,7 @@ test("GET /api/orgs/[orgSlug]/workflows returns workflow lists for viewers", asy
           name: "Incident triage",
           description: "Routes incidents",
           category: "Operations",
-          tags: ["ops"],
+          tags: ["nexus"],
           status: "published",
           latestVersionNumber: 2,
           hasDraft: false,
@@ -258,7 +261,8 @@ test("POST /api/orgs/[orgSlug]/workflows enforces editor permissions and returns
 });
 
 test("GET /api/orgs/[orgSlug]/workflows/[workflowId] maps missing workflows to 404", async () => {
-  workflowDetailRouteDeps.auth = (async () => createSession("user_route")) as never;
+  workflowDetailRouteDeps.auth = (async () =>
+    createSession("user_route")) as never;
   workflowDetailRouteDeps.createRequestLogger = () => createLogger() as never;
   workflowDetailRouteDeps.getApiOrgAccess = async () =>
     createOrgAccess("viewer");
@@ -278,7 +282,8 @@ test("GET /api/orgs/[orgSlug]/workflows/[workflowId] maps missing workflows to 4
 });
 
 test("GET and PATCH draft routes handle conflicts, validation, and success", async () => {
-  workflowDraftRouteDeps.auth = (async () => createSession("user_route")) as never;
+  workflowDraftRouteDeps.auth = (async () =>
+    createSession("user_route")) as never;
   workflowDraftRouteDeps.createRequestLogger = () => createLogger() as never;
   workflowDraftRouteDeps.getApiOrgAccess = async () =>
     createOrgAccess("workflow_editor");
@@ -353,7 +358,8 @@ test("GET and PATCH draft routes handle conflicts, validation, and success", asy
 });
 
 test("POST publish returns validation issues and successful snapshots", async () => {
-  workflowPublishRouteDeps.auth = (async () => createSession("user_route")) as never;
+  workflowPublishRouteDeps.auth = (async () =>
+    createSession("user_route")) as never;
   workflowPublishRouteDeps.createRequestLogger = () => createLogger() as never;
   workflowPublishRouteDeps.getApiOrgAccess = async () =>
     createOrgAccess("workflow_editor");
@@ -370,11 +376,14 @@ test("POST publish returns validation issues and successful snapshots", async ()
   };
 
   const invalidResponse = await postWorkflowPublish(
-    new Request("https://example.com/api/orgs/acme/workflows/WFL-1234/publish", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ notes: "Release note" }),
-    }),
+    new Request(
+      "https://example.com/api/orgs/acme/workflows/WFL-1234/publish",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes: "Release note" }),
+      },
+    ),
     { params: Promise.resolve({ orgSlug: "acme", workflowId: "WFL-1234" }) },
   );
   const invalidPayload = await readJson<{ issues: Array<{ code: string }> }>(
@@ -408,11 +417,14 @@ test("POST publish returns validation issues and successful snapshots", async ()
   });
 
   const successResponse = await postWorkflowPublish(
-    new Request("https://example.com/api/orgs/acme/workflows/WFL-1234/publish", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ notes: "Release note" }),
-    }),
+    new Request(
+      "https://example.com/api/orgs/acme/workflows/WFL-1234/publish",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes: "Release note" }),
+      },
+    ),
     { params: Promise.resolve({ orgSlug: "acme", workflowId: "WFL-1234" }) },
   );
   const successPayload = await readJson<{ version: { versionNumber: number } }>(
@@ -424,7 +436,8 @@ test("POST publish returns validation issues and successful snapshots", async ()
 });
 
 test("POST archive returns archived detail and GET version validates version numbers", async () => {
-  workflowArchiveRouteDeps.auth = (async () => createSession("user_route")) as never;
+  workflowArchiveRouteDeps.auth = (async () =>
+    createSession("user_route")) as never;
   workflowArchiveRouteDeps.createRequestLogger = () => createLogger() as never;
   workflowArchiveRouteDeps.getApiOrgAccess = async () =>
     createOrgAccess("org_admin");
@@ -451,11 +464,14 @@ test("POST archive returns archived detail and GET version validates version num
   });
 
   const archiveResponse = await postWorkflowArchive(
-    new Request("https://example.com/api/orgs/acme/workflows/WFL-1234/archive", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reason: "Deprecated" }),
-    }),
+    new Request(
+      "https://example.com/api/orgs/acme/workflows/WFL-1234/archive",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: "Deprecated" }),
+      },
+    ),
     { params: Promise.resolve({ orgSlug: "acme", workflowId: "WFL-1234" }) },
   );
   const archivePayload = await readJson<{ detail: { status: string } }>(
@@ -465,7 +481,8 @@ test("POST archive returns archived detail and GET version validates version num
   assert.equal(archiveResponse.status, 200);
   assert.equal(archivePayload.detail.status, "archived");
 
-  workflowVersionRouteDeps.auth = (async () => createSession("user_route")) as never;
+  workflowVersionRouteDeps.auth = (async () =>
+    createSession("user_route")) as never;
   workflowVersionRouteDeps.createRequestLogger = () => createLogger() as never;
   workflowVersionRouteDeps.getApiOrgAccess = async () =>
     createOrgAccess("viewer");
@@ -508,7 +525,9 @@ test("POST archive returns archived detail and GET version validates version num
   });
 
   const versionResponse = await getWorkflowVersion(
-    new Request("https://example.com/api/orgs/acme/workflows/WFL-1234/versions/2"),
+    new Request(
+      "https://example.com/api/orgs/acme/workflows/WFL-1234/versions/2",
+    ),
     {
       params: Promise.resolve({
         orgSlug: "acme",
@@ -526,7 +545,8 @@ test("POST archive returns archived detail and GET version validates version num
 });
 
 test("GET versions returns immutable version history for viewers", async () => {
-  workflowVersionsRouteDeps.auth = (async () => createSession("user_route")) as never;
+  workflowVersionsRouteDeps.auth = (async () =>
+    createSession("user_route")) as never;
   workflowVersionsRouteDeps.createRequestLogger = () => createLogger() as never;
   workflowVersionsRouteDeps.getApiOrgAccess = async () =>
     createOrgAccess("viewer");
@@ -543,12 +563,14 @@ test("GET versions returns immutable version history for viewers", async () => {
   ];
 
   const response = await getWorkflowVersions(
-    new Request("https://example.com/api/orgs/acme/workflows/WFL-1234/versions"),
+    new Request(
+      "https://example.com/api/orgs/acme/workflows/WFL-1234/versions",
+    ),
     { params: Promise.resolve({ orgSlug: "acme", workflowId: "WFL-1234" }) },
   );
-  const payload = await readJson<{ versions: Array<{ versionNumber: number }> }>(
-    response,
-  );
+  const payload = await readJson<{
+    versions: Array<{ versionNumber: number }>;
+  }>(response);
 
   assert.equal(response.status, 200);
   assert.equal(payload.versions[0]?.versionNumber, 1);

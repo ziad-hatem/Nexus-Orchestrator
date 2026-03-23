@@ -79,20 +79,26 @@ test("executeWorkflowActionNode dispatches each supported action to the correct 
     calls.push("send_email");
     return {
       classification: "success",
-      output: { actionType: "send_email", recipient: "ops@example.com" },
+      output: { actionType: "send_email", recipient: "nexus@example.com" },
       logs: [],
     } as never;
   };
   workflowActionExecutorDeps.executeCreateTaskAction = async (params) => {
-    calls.push(`create_task:${params.context.runId}:${params.context.organizationId}`);
+    calls.push(
+      `create_task:${params.context.runId}:${params.context.organizationId}`,
+    );
     return {
       classification: "success",
       output: { actionType: "create_task", taskId: "task_1" },
       logs: [],
     } as never;
   };
-  workflowActionExecutorDeps.executeUpdateRecordFieldAction = async (params) => {
-    calls.push(`update_record_field:${params.context.stepId}:${params.context.workflowVersionId}`);
+  workflowActionExecutorDeps.executeUpdateRecordFieldAction = async (
+    params,
+  ) => {
+    calls.push(
+      `update_record_field:${params.context.stepId}:${params.context.workflowVersionId}`,
+    );
     return {
       classification: "success",
       output: { actionType: "update_record_field", recordId: "record_1" },

@@ -49,7 +49,7 @@ test("executeSendEmailAction renders the message and succeeds through the provid
     action: createEmailAction(),
     context: {
       payload: {
-        recipient: "ops@example.com",
+        recipient: "nexus@example.com",
         ticketId: "T-100",
         priority: "high",
       },
@@ -63,14 +63,14 @@ test("executeSendEmailAction renders the message and succeeds through the provid
   assert.equal(result.classification, "success");
   assert.deepEqual(sentPayload, {
     from: "Nexus <noreply@example.com>",
-    to: ["ops@example.com"],
+    to: ["nexus@example.com"],
     subject: "Ticket T-100",
     text: "Priority=high",
     replyTo: "support@example.com",
   });
   assert.deepEqual(result.output, {
     actionType: "send_email",
-    recipient: "ops@example.com",
+    recipient: "nexus@example.com",
     subject: "Ticket T-100",
     providerMessageId: "msg_123",
     replyTo: "support@example.com",
@@ -101,7 +101,7 @@ test("executeSendEmailAction fails closed for invalid recipients and invalid rep
     action,
     context: {
       payload: {
-        recipient: "ops@example.com",
+        recipient: "nexus@example.com",
         ticketId: "T-100",
         priority: "high",
       },
@@ -133,7 +133,7 @@ test("executeSendEmailAction classifies provider outages as retryable", async ()
     action: createEmailAction(),
     context: {
       payload: {
-        recipient: "ops@example.com",
+        recipient: "nexus@example.com",
         ticketId: "T-100",
         priority: "high",
       },
@@ -167,7 +167,7 @@ test("executeSendEmailAction does not classify unrelated messages containing the
     action: createEmailAction(),
     context: {
       payload: {
-        recipient: "ops@example.com",
+        recipient: "nexus@example.com",
         ticketId: "T-100",
         priority: "high",
       },
@@ -193,7 +193,7 @@ test("executeSendEmailAction fails closed on invalid template syntax", async () 
     action,
     context: {
       payload: {
-        recipient: "ops@example.com",
+        recipient: "nexus@example.com",
         ticketId: "T-100",
         priority: "high",
       },

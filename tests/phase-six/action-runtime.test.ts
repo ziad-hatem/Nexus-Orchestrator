@@ -156,7 +156,11 @@ function createWorkflowVersionRow(
 }
 
 function createActionDraft(
-  actionType: "send_webhook" | "send_email" | "create_task" | "update_record_field",
+  actionType:
+    | "send_webhook"
+    | "send_email"
+    | "create_task"
+    | "update_record_field",
 ): WorkflowDraftDocument {
   const base = createEmptyWorkflowDraftDocument({
     name: "Action runner",
@@ -271,7 +275,9 @@ function installRuntimeBaseDeps(
     });
 }
 
-function installStepPersistence(stepUpdates: Array<{ stepId: string; patch: Record<string, unknown> }>) {
+function installStepPersistence(
+  stepUpdates: Array<{ stepId: string; patch: Record<string, unknown> }>,
+) {
   executionServiceDeps.createWorkflowRunStepRow = async (params) =>
     createStepRow({
       id: `step_${params.sequenceNumber}`,
@@ -322,7 +328,8 @@ function buildQueueJob(): ExecutionQueueJob {
 test("processExecutionQueueJob executes published webhook actions and persists the step output", async () => {
   const draft = createActionDraft("send_webhook");
   const version = createWorkflowVersionRow(draft);
-  const stepUpdates: Array<{ stepId: string; patch: Record<string, unknown> }> = [];
+  const stepUpdates: Array<{ stepId: string; patch: Record<string, unknown> }> =
+    [];
   const terminalStatuses: string[] = [];
 
   installRuntimeBaseDeps(version);
@@ -343,11 +350,14 @@ test("processExecutionQueueJob executes published webhook actions and persists t
     });
 
   webhookActionDeps.createTimeoutSignal = () => new AbortController().signal;
-  webhookActionDeps.fetch = (async () => new Response("accepted", { status: 202 })) as never;
+  webhookActionDeps.fetch = (async () =>
+    new Response("accepted", { status: 202 })) as never;
 
   await processExecutionQueueJob(buildQueueJob());
 
-  const actionPatch = stepUpdates.find((entry) => entry.stepId === "step_2")?.patch;
+  const actionPatch = stepUpdates.find(
+    (entry) => entry.stepId === "step_2",
+  )?.patch;
   assert.deepEqual(terminalStatuses, ["success"]);
   assert.equal(actionPatch?.status, "success");
   assert.equal(
@@ -366,7 +376,8 @@ test("processExecutionQueueJob executes published email actions against the boun
     id: "version_email_1",
     version_number: 7,
   });
-  const stepUpdates: Array<{ stepId: string; patch: Record<string, unknown> }> = [];
+  const stepUpdates: Array<{ stepId: string; patch: Record<string, unknown> }> =
+    [];
 
   installRuntimeBaseDeps(version, {
     workflow_version_id: "version_email_1",
@@ -377,7 +388,7 @@ test("processExecutionQueueJob executes published email actions against the boun
       eventKey: "ticket.created",
     },
     payload: {
-      recipient: "ops@example.com",
+      recipient: "nexus@example.com",
       ticketId: "T-100",
       priority: "high",
     },
@@ -411,21 +422,24 @@ test("processExecutionQueueJob executes published email actions against the boun
 
   await processExecutionQueueJob(buildQueueJob());
 
-  const actionPatch = stepUpdates.find((entry) => entry.stepId === "step_2")?.patch;
+  const actionPatch = stepUpdates.find(
+    (entry) => entry.stepId === "step_2",
+  )?.patch;
   assert.equal(
     (actionPatch?.output_payload as Record<string, unknown>).providerMessageId,
     "msg_123",
   );
   assert.equal(
     (actionPatch?.output_payload as Record<string, unknown>).recipient,
-    "ops@example.com",
+    "nexus@example.com",
   );
 });
 
 test("processExecutionQueueJob executes create task actions and persists tenant-scoped outcomes", async () => {
   const draft = createActionDraft("create_task");
   const version = createWorkflowVersionRow(draft);
-  const stepUpdates: Array<{ stepId: string; patch: Record<string, unknown> }> = [];
+  const stepUpdates: Array<{ stepId: string; patch: Record<string, unknown> }> =
+    [];
   let createdTaskInput: Record<string, unknown> | undefined;
 
   installRuntimeBaseDeps(version, {
@@ -482,7 +496,9 @@ test("processExecutionQueueJob executes create task actions and persists tenant-
 
   await processExecutionQueueJob(buildQueueJob());
 
-  const actionPatch = stepUpdates.find((entry) => entry.stepId === "step_2")?.patch;
+  const actionPatch = stepUpdates.find(
+    (entry) => entry.stepId === "step_2",
+  )?.patch;
   assert.equal(createdTaskInput?.organizationId, "org_1");
   assert.equal(createdTaskInput?.runId, "run_db_1");
   assert.equal(
@@ -494,7 +510,8 @@ test("processExecutionQueueJob executes create task actions and persists tenant-
 test("processExecutionQueueJob executes record updates and persists the bound run identifiers", async () => {
   const draft = createActionDraft("update_record_field");
   const version = createWorkflowVersionRow(draft);
-  const stepUpdates: Array<{ stepId: string; patch: Record<string, unknown> }> = [];
+  const stepUpdates: Array<{ stepId: string; patch: Record<string, unknown> }> =
+    [];
   let upsertInput: Record<string, unknown> | undefined;
 
   installRuntimeBaseDeps(version, {
@@ -542,7 +559,9 @@ test("processExecutionQueueJob executes record updates and persists the bound ru
 
   await processExecutionQueueJob(buildQueueJob());
 
-  const actionPatch = stepUpdates.find((entry) => entry.stepId === "step_2")?.patch;
+  const actionPatch = stepUpdates.find(
+    (entry) => entry.stepId === "step_2",
+  )?.patch;
   assert.equal(upsertInput?.organizationId, "org_1");
   assert.equal(upsertInput?.runId, "run_db_1");
   assert.equal(upsertInput?.value, 7);
@@ -558,7 +577,8 @@ test("processExecutionQueueJob schedules retry when webhook actions fail with a 
     id: "version_retry_1",
     version_number: 4,
   });
-  const stepUpdates: Array<{ stepId: string; patch: Record<string, unknown> }> = [];
+  const stepUpdates: Array<{ stepId: string; patch: Record<string, unknown> }> =
+    [];
   const scheduledJobs: ExecutionQueueJob[] = [];
   let retryAttemptNumber = 0;
 
@@ -600,11 +620,14 @@ test("processExecutionQueueJob schedules retry when webhook actions fail with a 
   };
 
   webhookActionDeps.createTimeoutSignal = () => new AbortController().signal;
-  webhookActionDeps.fetch = (async () => new Response("server down", { status: 503 })) as never;
+  webhookActionDeps.fetch = (async () =>
+    new Response("server down", { status: 503 })) as never;
 
   await processExecutionQueueJob(buildQueueJob());
 
-  const actionPatch = stepUpdates.find((entry) => entry.stepId === "step_2")?.patch;
+  const actionPatch = stepUpdates.find(
+    (entry) => entry.stepId === "step_2",
+  )?.patch;
   assert.equal(actionPatch?.status, "failed");
   assert.equal(retryAttemptNumber, 2);
   assert.equal(scheduledJobs.length, 1);

@@ -154,7 +154,7 @@ function createEmailAction() {
   const action = createWorkflowActionDefinition("send_email");
   action.label = "Notify team";
   action.config = {
-    to: "ops@example.com",
+    to: "nexus@example.com",
     subject: "Ticket update",
     body: "Workflow processed",
     replyTo: "",
@@ -255,7 +255,8 @@ test("processExecutionQueueJob evaluates matching conditions, logs the result, a
   const conditionNodeId = draft.config.conditions[0]?.id ?? "condition_1";
   const actionNodeId = draft.config.actions[0]?.id ?? "action_1";
   const stepStarts: Array<{ nodeId: string; sequenceNumber: number }> = [];
-  const stepUpdates: Array<{ stepId: string; patch: Record<string, unknown> }> = [];
+  const stepUpdates: Array<{ stepId: string; patch: Record<string, unknown> }> =
+    [];
   const terminalStatuses: string[] = [];
   let actionExecutions = 0;
 
@@ -338,7 +339,9 @@ test("processExecutionQueueJob evaluates matching conditions, logs the result, a
   assert.equal(actionExecutions, 1);
   assert.deepEqual(terminalStatuses, ["success"]);
 
-  const conditionPatch = stepUpdates.find((entry) => entry.stepId === "step_2")?.patch;
+  const conditionPatch = stepUpdates.find(
+    (entry) => entry.stepId === "step_2",
+  )?.patch;
   assert.equal(conditionPatch?.status, "success");
   assert.deepEqual(conditionPatch?.output_payload, {
     matched: true,
@@ -390,7 +393,10 @@ test("processExecutionQueueJob skips actions when conditions do not match across
     ],
   ] as const) {
     const stepStarts: Array<{ nodeId: string; sequenceNumber: number }> = [];
-    const stepUpdates: Array<{ stepId: string; patch: Record<string, unknown> }> = [];
+    const stepUpdates: Array<{
+      stepId: string;
+      patch: Record<string, unknown>;
+    }> = [];
     const terminalStatuses: string[] = [];
     let actionExecutions = 0;
 
@@ -496,7 +502,9 @@ test("processExecutionQueueJob skips actions when conditions do not match across
     assert.equal(actionExecutions, 0, source);
     assert.deepEqual(terminalStatuses, ["success"]);
 
-    const conditionPatch = stepUpdates.find((entry) => entry.stepId === "step_2")?.patch;
+    const conditionPatch = stepUpdates.find(
+      (entry) => entry.stepId === "step_2",
+    )?.patch;
     assert.deepEqual(conditionPatch?.output_payload, {
       matched: false,
       resolverScope: "payload",
@@ -508,7 +516,10 @@ test("processExecutionQueueJob skips actions when conditions do not match across
       nextNodeId: null,
     });
     const logs = conditionPatch?.logs as Array<Record<string, unknown>>;
-    assert.equal(logs[0]?.message, "Condition did not match. Downstream actions were skipped.");
+    assert.equal(
+      logs[0]?.message,
+      "Condition did not match. Downstream actions were skipped.",
+    );
   }
 });
 
@@ -525,7 +536,9 @@ test("processExecutionQueueJob fails runs when the bound version contains an inv
 
   installRuntimeBaseDeps(brokenVersion);
   executionServiceDeps.createWorkflowRunStepRow = async () => {
-    throw new Error("Invalid published versions should fail before step creation");
+    throw new Error(
+      "Invalid published versions should fail before step creation",
+    );
   };
   executionServiceDeps.updateWorkflowRunStepRow = async (params) =>
     createStepRow({
@@ -572,7 +585,8 @@ test("processExecutionQueueJob records condition evaluation failures at the step
     value: 10,
   });
   const version = createWorkflowVersionRow(draft);
-  const stepUpdates: Array<{ stepId: string; patch: Record<string, unknown> }> = [];
+  const stepUpdates: Array<{ stepId: string; patch: Record<string, unknown> }> =
+    [];
   let failureCode = "";
 
   installRuntimeBaseDeps(version);
@@ -642,7 +656,9 @@ test("processExecutionQueueJob records condition evaluation failures at the step
     reason: "trigger",
   });
 
-  const conditionPatch = stepUpdates.find((entry) => entry.stepId === "step_2")?.patch;
+  const conditionPatch = stepUpdates.find(
+    (entry) => entry.stepId === "step_2",
+  )?.patch;
   assert.equal(conditionPatch?.status, "failed");
   assert.equal(conditionPatch?.error_code, "condition_evaluation_failed");
   assert.equal(conditionPatch?.error_message, "Forced condition failure");

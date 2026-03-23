@@ -154,7 +154,7 @@ function createTerminalActionDraft(): WorkflowDraftDocument {
   const action = createWorkflowActionDefinition("send_email");
   action.label = "Notify team";
   action.config = {
-    to: "ops@example.com",
+    to: "nexus@example.com",
     subject: "Workflow update",
     body: "Workflow completed",
     replyTo: "",
@@ -269,7 +269,9 @@ test("cancelWorkflowRun backfills a missing retry attempt before immediate cance
       },
     ] as never;
   executionServiceDeps.listWorkflowVersionRowsByIds = async () =>
-    [{ id: "version_db_1", workflow_id: "workflow_db_1", version_number: 1 }] as never;
+    [
+      { id: "version_db_1", workflow_id: "workflow_db_1", version_number: 1 },
+    ] as never;
   executionServiceDeps.getExecutionRetryDelaysSeconds = () => [45, 90, 180];
 
   const result = await cancelWorkflowRun({
@@ -451,7 +453,9 @@ test("processExecutionQueueJob honours cooperative cancellation between steps", 
     });
   };
   executionServiceDeps.executeWorkflowActionNode = async () => {
-    assert.fail("Action execution should not start after cooperative cancellation");
+    assert.fail(
+      "Action execution should not start after cooperative cancellation",
+    );
   };
   executionServiceDeps.completeWorkflowRunAttempt = async (params) => {
     completedStatuses.push(params.status);

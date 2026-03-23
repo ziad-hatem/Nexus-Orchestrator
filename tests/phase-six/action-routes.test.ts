@@ -32,9 +32,15 @@ const originalExecutionDetailRouteDeps = { ...executionDetailRouteDeps };
 
 test.afterEach(() => {
   restoreMutableExports(workflowDraftRouteDeps, originalWorkflowDraftRouteDeps);
-  restoreMutableExports(workflowPublishRouteDeps, originalWorkflowPublishRouteDeps);
+  restoreMutableExports(
+    workflowPublishRouteDeps,
+    originalWorkflowPublishRouteDeps,
+  );
   restoreMutableExports(manualTriggerRouteDeps, originalManualTriggerRouteDeps);
-  restoreMutableExports(executionDetailRouteDeps, originalExecutionDetailRouteDeps);
+  restoreMutableExports(
+    executionDetailRouteDeps,
+    originalExecutionDetailRouteDeps,
+  );
 });
 
 function createLogger() {
@@ -108,7 +114,8 @@ const invalidActionIssue: ValidationIssue = {
 };
 
 test("PATCH workflow draft persists invalid action configs and returns validation issues", async () => {
-  workflowDraftRouteDeps.auth = (async () => createSession("user_route")) as never;
+  workflowDraftRouteDeps.auth = (async () =>
+    createSession("user_route")) as never;
   workflowDraftRouteDeps.createRequestLogger = () => createLogger() as never;
 
   const malformedResponse = await patchWorkflowDraft(
@@ -121,7 +128,8 @@ test("PATCH workflow draft persists invalid action configs and returns validatio
   );
   assert.equal(malformedResponse.status, 400);
 
-  workflowDraftRouteDeps.getApiOrgAccess = async () => createOrgAccess("viewer");
+  workflowDraftRouteDeps.getApiOrgAccess = async () =>
+    createOrgAccess("viewer");
   const forbiddenResponse = await patchWorkflowDraft(
     new Request("https://example.com/api/orgs/acme/workflows/WFL-1001/draft", {
       method: "PATCH",
@@ -224,11 +232,15 @@ test("PATCH workflow draft persists invalid action configs and returns validatio
   }>(response);
 
   assert.equal(response.status, 200);
-  assert.equal(payload.draft.validationIssues[0]?.code, "unsafe_update_record_field");
+  assert.equal(
+    payload.draft.validationIssues[0]?.code,
+    "unsafe_update_record_field",
+  );
 });
 
 test("POST workflow publish returns 201 for valid publishes and 409 with action issues for invalid configs", async () => {
-  workflowPublishRouteDeps.auth = (async () => createSession("user_route")) as never;
+  workflowPublishRouteDeps.auth = (async () =>
+    createSession("user_route")) as never;
   workflowPublishRouteDeps.createRequestLogger = () => createLogger() as never;
   workflowPublishRouteDeps.handleRouteError = createRouteErrorResponse as never;
   workflowPublishRouteDeps.getApiOrgAccess = async () =>
@@ -264,11 +276,14 @@ test("POST workflow publish returns 201 for valid publishes and 409 with action 
     }) as never;
 
   const successResponse = await postWorkflowPublish(
-    new Request("https://example.com/api/orgs/acme/workflows/WFL-1001/publish", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ notes: "Release note" }),
-    }),
+    new Request(
+      "https://example.com/api/orgs/acme/workflows/WFL-1001/publish",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes: "Release note" }),
+      },
+    ),
     { params: Promise.resolve({ orgSlug: "acme", workflowId: "WFL-1001" }) },
   );
   assert.equal(successResponse.status, 201);
@@ -278,11 +293,14 @@ test("POST workflow publish returns 201 for valid publishes and 409 with action 
   };
 
   const conflictResponse = await postWorkflowPublish(
-    new Request("https://example.com/api/orgs/acme/workflows/WFL-1001/publish", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ notes: "" }),
-    }),
+    new Request(
+      "https://example.com/api/orgs/acme/workflows/WFL-1001/publish",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notes: "" }),
+      },
+    ),
     { params: Promise.resolve({ orgSlug: "acme", workflowId: "WFL-1001" }) },
   );
   const conflictPayload = await readJson<{
@@ -299,7 +317,8 @@ test("manual trigger route forwards nested payloads and idempotency keys for act
   let receivedPayload: unknown = null;
   let receivedIdempotencyKey: string | null | undefined;
 
-  manualTriggerRouteDeps.auth = (async () => createSession("user_route")) as never;
+  manualTriggerRouteDeps.auth = (async () =>
+    createSession("user_route")) as never;
   manualTriggerRouteDeps.createRequestLogger = () => createLogger() as never;
   manualTriggerRouteDeps.getApiOrgAccess = async () =>
     createOrgAccess("workflow_editor");
@@ -343,7 +362,8 @@ test("manual trigger route forwards nested payloads and idempotency keys for act
 });
 
 test("execution detail route returns action outcomes and preserves 404 mapping", async () => {
-  executionDetailRouteDeps.auth = (async () => createSession("user_route")) as never;
+  executionDetailRouteDeps.auth = (async () =>
+    createSession("user_route")) as never;
   executionDetailRouteDeps.createRequestLogger = () => createLogger() as never;
   executionDetailRouteDeps.getApiOrgAccess = async () =>
     createOrgAccess("viewer");
@@ -399,7 +419,7 @@ test("execution detail route returns action outcomes and preserves 404 mapping",
           },
           outputPayload: {
             actionType: "send_email",
-            recipient: "ops@example.com",
+            recipient: "nexus@example.com",
             subject: "Ticket T-100",
             providerMessageId: "msg_123",
             replyTo: "support@example.com",
@@ -412,7 +432,7 @@ test("execution detail route returns action outcomes and preserves 404 mapping",
               level: "info",
               message: "Sending email action through Resend.",
               data: {
-                to: "ops@example.com",
+                to: "nexus@example.com",
               },
             },
           ],

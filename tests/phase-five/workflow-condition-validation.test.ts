@@ -16,7 +16,7 @@ function createEmailAction() {
   const action = createWorkflowActionDefinition("send_email");
   action.label = "Notify team";
   action.config = {
-    to: "ops@example.com",
+    to: "nexus@example.com",
     subject: "Ticket update",
     body: "Workflow processed",
     replyTo: "",
@@ -107,11 +107,15 @@ test("validateWorkflowDraftDocument requires numeric values for greater_than and
   );
 
   assert.equal(
-    greaterThanIssues.some((issue) => issue.code === "invalid_condition_numeric_value"),
+    greaterThanIssues.some(
+      (issue) => issue.code === "invalid_condition_numeric_value",
+    ),
     true,
   );
   assert.equal(
-    lessThanIssues.some((issue) => issue.code === "invalid_condition_numeric_value"),
+    lessThanIssues.some(
+      (issue) => issue.code === "invalid_condition_numeric_value",
+    ),
     true,
   );
 });

@@ -35,7 +35,7 @@ function createWorkflowRow(overrides: Partial<WorkflowRow> = {}): WorkflowRow {
     name: "Incident triage",
     description: "Routes incidents",
     category: "Operations",
-    tags: ["ops"],
+    tags: ["nexus"],
     status: "published",
     latest_published_version_number: 1,
     created_by: "user_1",

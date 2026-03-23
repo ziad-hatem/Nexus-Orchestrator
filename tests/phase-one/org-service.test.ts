@@ -30,7 +30,9 @@ test("createOrganizationWithUniqueSlug retries duplicate slugs until a unique va
         if (attemptedSlugs.length === 1) {
           return {
             data: null,
-            error: { message: "duplicate key value violates unique constraint" },
+            error: {
+              message: "duplicate key value violates unique constraint",
+            },
           };
         }
 
@@ -48,10 +50,10 @@ test("createOrganizationWithUniqueSlug retries duplicate slugs until a unique va
       },
     }) as never;
 
-  const organization = await createOrganizationWithUniqueSlug("Acme Ops");
+  const organization = await createOrganizationWithUniqueSlug("Acme nexus");
 
-  assert.deepEqual(attemptedSlugs, ["acme-ops", "acme-ops-2"]);
-  assert.equal(organization.slug, "acme-ops-2");
+  assert.deepEqual(attemptedSlugs, ["acme-nexus", "acme-nexus-2"]);
+  assert.equal(organization.slug, "acme-nexus-2");
 });
 
 test("createOrganizationForUser rolls back the new organization if audit logging fails", async () => {

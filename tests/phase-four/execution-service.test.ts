@@ -158,7 +158,7 @@ function createTerminalActionDraft(): WorkflowDraftDocument {
   const action = createWorkflowActionDefinition("send_email");
   action.label = "Notify team";
   action.config = {
-    to: "ops@example.com",
+    to: "nexus@example.com",
     subject: "Workflow update",
     body: "Workflow completed",
     replyTo: "",
@@ -197,12 +197,16 @@ test("enqueueWorkflowRunForExecution only dispatches pending and retrying runs",
     queuedJobs.push(job);
   };
 
-  await enqueueWorkflowRunForExecution({ run: createRunRow({ status: "pending" }) });
+  await enqueueWorkflowRunForExecution({
+    run: createRunRow({ status: "pending" }),
+  });
   await enqueueWorkflowRunForExecution({
     run: createRunRow({ status: "retrying" }),
     reason: "retry",
   });
-  await enqueueWorkflowRunForExecution({ run: createRunRow({ status: "success" }) });
+  await enqueueWorkflowRunForExecution({
+    run: createRunRow({ status: "success" }),
+  });
 
   assert.equal(queuedJobs.length, 2);
   assert.equal(queuedJobs[0]?.reason, "trigger");
@@ -231,28 +235,30 @@ test("listWorkflowRunSummaries filters by workflow and status and returns aggreg
       payload: {},
     }),
   ];
-  executionServiceDeps.listWorkflowRowsByIds = async () => [
-    {
-      id: "workflow_db_1",
-      workflow_key: "WFL-1001",
-      name: "Incident triage",
-      status: "published",
-      category: "Operations",
-      latest_published_version_number: 1,
-    },
-    {
-      id: "workflow_db_2",
-      workflow_key: "WFL-1002",
-      name: "Webhook intake",
-      status: "published",
-      category: "Support",
-      latest_published_version_number: 2,
-    },
-  ] as never;
-  executionServiceDeps.listWorkflowVersionRowsByIds = async () => [
-    { id: "version_db_1", workflow_id: "workflow_db_1", version_number: 1 },
-    { id: "version_db_2", workflow_id: "workflow_db_2", version_number: 2 },
-  ] as never;
+  executionServiceDeps.listWorkflowRowsByIds = async () =>
+    [
+      {
+        id: "workflow_db_1",
+        workflow_key: "WFL-1001",
+        name: "Incident triage",
+        status: "published",
+        category: "Operations",
+        latest_published_version_number: 1,
+      },
+      {
+        id: "workflow_db_2",
+        workflow_key: "WFL-1002",
+        name: "Webhook intake",
+        status: "published",
+        category: "Support",
+        latest_published_version_number: 2,
+      },
+    ] as never;
+  executionServiceDeps.listWorkflowVersionRowsByIds = async () =>
+    [
+      { id: "version_db_1", workflow_id: "workflow_db_1", version_number: 1 },
+      { id: "version_db_2", workflow_id: "workflow_db_2", version_number: 2 },
+    ] as never;
 
   const result = await listWorkflowRunSummaries({
     organizationId: "org_1",
@@ -296,9 +302,10 @@ test("getWorkflowRunDetail returns the bound published version and actor-backed 
       },
     ] as never;
   executionServiceDeps.listWorkflowVersionRowsByIds = async () =>
-    [{ id: "version_db_7", workflow_id: "workflow_db_1", version_number: 7 }] as never;
-  executionServiceDeps.getWorkflowVersionRowById = async () =>
-    version;
+    [
+      { id: "version_db_7", workflow_id: "workflow_db_1", version_number: 7 },
+    ] as never;
+  executionServiceDeps.getWorkflowVersionRowById = async () => version;
   executionServiceDeps.listWorkflowRunStepRows = async () => [
     createStepRow({
       node_id: draft.config.trigger?.id ?? "trigger_1",
@@ -324,13 +331,14 @@ test("getWorkflowRunDetail returns the bound published version and actor-backed 
     triggered_by_user_id: "user_1",
     created_at: "2026-03-23T00:00:00.000Z",
   });
-  executionServiceDeps.listWorkflowActorsByIds = async () => [
-    {
-      id: "user_1",
-      name: "Operator One",
-      email: "ops@example.com",
-    },
-  ] as never;
+  executionServiceDeps.listWorkflowActorsByIds = async () =>
+    [
+      {
+        id: "user_1",
+        name: "Operator One",
+        email: "nexus@example.com",
+      },
+    ] as never;
 
   const detail = await getWorkflowRunDetail({
     organizationId: "org_1",
@@ -340,8 +348,11 @@ test("getWorkflowRunDetail returns the bound published version and actor-backed 
   assert.equal(detail.workflowVersionNumber, 7);
   assert.equal(detail.workflowName, "Incident triage");
   assert.equal(detail.attempts[0]?.requestedBy?.name, "Operator One");
-  assert.equal(detail.triggerActor?.email, "ops@example.com");
-  assert.notEqual((detail.payload as { apiKey?: string }).apiKey, "secret-token");
+  assert.equal(detail.triggerActor?.email, "nexus@example.com");
+  assert.notEqual(
+    (detail.payload as { apiKey?: string }).apiKey,
+    "secret-token",
+  );
 });
 
 test("cancelWorkflowRun cancels pending runs immediately and writes an audit event", async () => {
@@ -382,7 +393,9 @@ test("cancelWorkflowRun cancels pending runs immediately and writes an audit eve
       },
     ] as never;
   executionServiceDeps.listWorkflowVersionRowsByIds = async () =>
-    [{ id: "version_db_1", workflow_id: "workflow_db_1", version_number: 1 }] as never;
+    [
+      { id: "version_db_1", workflow_id: "workflow_db_1", version_number: 1 },
+    ] as never;
 
   const result = await cancelWorkflowRun({
     organizationId: "org_1",
@@ -426,7 +439,9 @@ test("cancelWorkflowRun requests cooperative cancellation for running runs", asy
       },
     ] as never;
   executionServiceDeps.listWorkflowVersionRowsByIds = async () =>
-    [{ id: "version_db_1", workflow_id: "workflow_db_1", version_number: 1 }] as never;
+    [
+      { id: "version_db_1", workflow_id: "workflow_db_1", version_number: 1 },
+    ] as never;
 
   const result = await cancelWorkflowRun({
     organizationId: "org_1",
@@ -501,7 +516,9 @@ test("retryWorkflowRun queues a manual retry attempt and writes an audit event",
       },
     ] as never;
   executionServiceDeps.listWorkflowVersionRowsByIds = async () =>
-    [{ id: "version_db_1", workflow_id: "workflow_db_1", version_number: 1 }] as never;
+    [
+      { id: "version_db_1", workflow_id: "workflow_db_1", version_number: 1 },
+    ] as never;
 
   const result = await retryWorkflowRun({
     organizationId: "org_1",
@@ -542,7 +559,10 @@ test("processExecutionQueueJob drives a bound version to success and records ord
       status: params.status ?? "scheduled",
     });
   executionServiceDeps.markWorkflowRunAttemptRunning = async () =>
-    createAttemptRow({ status: "running", started_at: "2026-03-23T00:00:02.000Z" });
+    createAttemptRow({
+      status: "running",
+      started_at: "2026-03-23T00:00:02.000Z",
+    });
   executionServiceDeps.getWorkflowVersionRowById = async () => version;
   executionServiceDeps.createWorkflowRunStepRow = async (params) => {
     stepStarts.push({
@@ -584,7 +604,10 @@ test("processExecutionQueueJob drives a bound version to success and records ord
   });
   executionServiceDeps.completeWorkflowRunAttempt = async (params) => {
     terminalStatuses.push(params.status);
-    return createAttemptRow({ status: params.status, attempt_number: params.attemptNumber });
+    return createAttemptRow({
+      status: params.status,
+      attempt_number: params.attemptNumber,
+    });
   };
   executionServiceDeps.markWorkflowRunSuccess = async () =>
     createRunRow({
@@ -761,7 +784,7 @@ test("processExecutionQueueJob fails cleanly when the bound workflow version is 
   assert.equal(failureCode, "missing_workflow_version");
 });
 
-test("processExecutionQueueJob no-ops when the run has already been claimed", async () => {
+test("processExecutionQueueJob no-nexus when the run has already been claimed", async () => {
   installExecutionServiceNoops();
   executionServiceDeps.claimWorkflowRunForExecution = async () => null;
 

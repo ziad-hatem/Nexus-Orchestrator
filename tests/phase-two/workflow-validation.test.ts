@@ -14,7 +14,7 @@ function createValidEmailAction() {
   const action = createWorkflowActionDefinition("send_email");
   action.label = "Send email";
   action.config = {
-    to: "ops@example.com",
+    to: "nexus@example.com",
     subject: "Workflow update",
     body: "A workflow step completed.",
     replyTo: "",
@@ -27,7 +27,7 @@ function createValidDraft(): WorkflowDraftDocument {
     name: "Incident triage",
     description: "Routes incidents to the right team",
     category: "Operations",
-    tags: ["ops", "urgent"],
+    tags: ["nexus", "urgent"],
     triggerType: "manual",
   });
 
@@ -70,7 +70,9 @@ test("validateWorkflowDraftDocument flags missing publish requirements", () => {
     },
   };
 
-  const codes = new Set(validateWorkflowDraftDocument(draft).map((issue) => issue.code));
+  const codes = new Set(
+    validateWorkflowDraftDocument(draft).map((issue) => issue.code),
+  );
 
   assert.equal(codes.has("missing_name"), true);
   assert.equal(codes.has("missing_category"), true);
