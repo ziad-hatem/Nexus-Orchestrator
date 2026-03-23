@@ -13,10 +13,13 @@ export async function POST(req: Request) {
       requireSession: true,
     });
     if (!userIdResult.ok) {
-      return NextResponse.json({ error: userIdResult.error }, { status: userIdResult.status });
+      return NextResponse.json(
+        { error: userIdResult.error },
+        { status: userIdResult.status },
+      );
     }
 
-    const options = createPasskeyServerOptions();
+    const options = createPasskeyServerOptions(req);
     const passkeys = await listUserPasskeys(userIdResult.userId, options);
     return NextResponse.json(passkeys, { status: 200 });
   } catch (error: unknown) {
@@ -25,4 +28,3 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }
-

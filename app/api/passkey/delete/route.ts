@@ -7,11 +7,17 @@ export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
-    const body = (await req.json()) as { userId?: string; credentialId?: string };
+    const body = (await req.json()) as {
+      userId?: string;
+      credentialId?: string;
+    };
     const credentialId =
       typeof body.credentialId === "string" ? body.credentialId.trim() : "";
     if (!credentialId) {
-      return NextResponse.json({ error: "credentialId is required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "credentialId is required" },
+        { status: 400 },
+      );
     }
 
     const userIdResult = await resolvePasskeyUserId({
@@ -19,10 +25,13 @@ export async function POST(req: Request) {
       requireSession: true,
     });
     if (!userIdResult.ok) {
-      return NextResponse.json({ error: userIdResult.error }, { status: userIdResult.status });
+      return NextResponse.json(
+        { error: userIdResult.error },
+        { status: userIdResult.status },
+      );
     }
 
-    const options = createPasskeyServerOptions();
+    const options = createPasskeyServerOptions(req);
     await deletePasskey(userIdResult.userId, credentialId, options);
     return NextResponse.json({ success: true }, { status: 200 });
   } catch (error: unknown) {
@@ -31,4 +40,3 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: message }, { status: 400 });
   }
 }
-

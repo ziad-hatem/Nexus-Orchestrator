@@ -17,8 +17,19 @@ function getBaseUrl(): string {
   return value.endsWith("/") ? value.slice(0, -1) : value;
 }
 
-function getExpectedOrigin(): string | string[] {
-  return process.env.PASSKEY_EXPECTED_ORIGIN ?? getBaseUrl();
+function getExpectedOrigin(req?: Request): string | string[] {
+  if (process.env.PASSKEY_EXPECTED_ORIGIN) {
+    return process.env.PASSKEY_EXPECTED_ORIGIN;
+  }
+  if (req) {
+    const origin = req.headers.get("origin");
+    if (origin) return origin;
+    const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+    if (host) {
+      return host.includes("localhost") ? `http://${host}` : `https://${host}`;
+    }
+  }
+  return getBaseUrl();
 }
 
 function getRpId(expectedOrigin: string | string[]): string {
@@ -36,9 +47,9 @@ function getRpId(expectedOrigin: string | string[]): string {
   }
 }
 
-export function createPasskeyServerOptions(): ServerOptions {
+export function createPasskeyServerOptions(req?: Request): ServerOptions {
   const supabase = createSupabaseAdminClient();
-  const expectedOrigin = getExpectedOrigin();
+  const expectedOrigin = getExpectedOrigin(req);
 
   return {
     adapter: new SupabaseAdapter(supabase, "passkeys"),

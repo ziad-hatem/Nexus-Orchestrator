@@ -14,7 +14,10 @@ export async function POST(req: Request) {
     };
 
     if (!body.credential) {
-      return NextResponse.json({ error: "credential is required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "credential is required" },
+        { status: 400 },
+      );
     }
 
     const userIdResult = await resolvePasskeyUserId({
@@ -22,10 +25,13 @@ export async function POST(req: Request) {
       requireSession: false,
     });
     if (!userIdResult.ok) {
-      return NextResponse.json({ error: userIdResult.error }, { status: userIdResult.status });
+      return NextResponse.json(
+        { error: userIdResult.error },
+        { status: userIdResult.status },
+      );
     }
 
-    const options = createPasskeyServerOptions();
+    const options = createPasskeyServerOptions(req);
     const result = await finishAuthentication(
       userIdResult.userId,
       body.credential as never,

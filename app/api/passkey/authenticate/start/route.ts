@@ -18,17 +18,24 @@ export async function POST(req: Request) {
       requireSession: false,
     });
     if (!userIdResult.ok) {
-      return NextResponse.json({ error: userIdResult.error }, { status: userIdResult.status });
+      return NextResponse.json(
+        { error: userIdResult.error },
+        { status: userIdResult.status },
+      );
     }
 
-    const options = createPasskeyServerOptions();
-    const authOptions = await startAuthentication(userIdResult.userId, options, {
-      timeout:
-        typeof body.timeout === "number" && Number.isFinite(body.timeout)
-          ? body.timeout
-          : undefined,
-      userVerification: body.userVerification ?? "preferred",
-    });
+    const options = createPasskeyServerOptions(req);
+    const authOptions = await startAuthentication(
+      userIdResult.userId,
+      options,
+      {
+        timeout:
+          typeof body.timeout === "number" && Number.isFinite(body.timeout)
+            ? body.timeout
+            : undefined,
+        userVerification: body.userVerification ?? "preferred",
+      },
+    );
 
     const normalizedOptions = {
       ...authOptions,

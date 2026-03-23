@@ -5,7 +5,10 @@ import { resolvePasskeyUserId } from "@/lib/server/passkey-request";
 
 export const runtime = "nodejs";
 
-function normalizeOptionalText(value: unknown, maxLength = 255): string | undefined {
+function normalizeOptionalText(
+  value: unknown,
+  maxLength = 255,
+): string | undefined {
   if (typeof value !== "string") {
     return undefined;
   }
@@ -32,10 +35,13 @@ export async function POST(req: Request) {
       requireSession: true,
     });
     if (!userIdResult.ok) {
-      return NextResponse.json({ error: userIdResult.error }, { status: userIdResult.status });
+      return NextResponse.json(
+        { error: userIdResult.error },
+        { status: userIdResult.status },
+      );
     }
 
-    const options = createPasskeyServerOptions();
+    const options = createPasskeyServerOptions(req);
     const registrationOptions = await startRegistration(
       userIdResult.userId,
       options,
