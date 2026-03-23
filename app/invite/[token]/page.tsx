@@ -50,12 +50,15 @@ export default async function InvitePage({ params }: InvitePageProps) {
       <div className="w-full flex-1 space-y-8">
         <section className="overflow-hidden rounded-[2.25rem] bg-[linear-gradient(135deg,rgba(0,95,158,0.98),rgba(0,120,199,0.88))] px-6 py-8 text-white shadow-[0_18px_48px_rgba(0,95,158,0.22)] sm:px-8">
           <div className="max-w-3xl">
-            <p className="label-caps text-[rgba(255,255,255,0.72)]">Organization invitation</p>
+            <p className="label-caps text-[rgba(255,255,255,0.72)]">
+              Organization invitation
+            </p>
             <h1 className="mt-3 text-4xl font-bold tracking-[-0.04em] text-white">
               Join {invite.organizationName}
             </h1>
             <p className="mt-3 text-sm text-[rgba(255,255,255,0.82)]">
-              This invite grants {ROLE_LABELS[invite.role]} access and can only be accepted by {invite.email}.
+              This invite grants {ROLE_LABELS[invite.role]} access and can only
+              be accepted by {invite.email}.
             </p>
           </div>
         </section>
@@ -98,7 +101,8 @@ export default async function InvitePage({ params }: InvitePageProps) {
 
             {invite.acceptedAt ? (
               <div className="mt-8 rounded-2xl bg-emerald-500/12 px-5 py-4 text-sm text-emerald-800 dark:text-emerald-200">
-                This invitation has already been accepted. You can open the workspace directly.
+                This invitation has already been accepted. You can open the
+                workspace directly.
               </div>
             ) : null}
 
@@ -122,17 +126,22 @@ export default async function InvitePage({ params }: InvitePageProps) {
                 {!session?.user?.id ? (
                   <div className="space-y-4">
                     <p className="text-sm text-[var(--on-surface-variant)]">
-                      Sign in or create an account with {invite.email} to claim this invite.
+                      Sign in or create an account with {invite.email} to claim
+                      this invite.
                     </p>
                     <div className="flex flex-col gap-3">
                       <Button asChild className="premium-gradient rounded-xl">
-                        <Link href={`/login?next=${returnPath}`}>
+                        <Link
+                          href={`/login?next=${returnPath}&email=${encodeURIComponent(invite.email)}`}
+                        >
                           Sign in to accept
                           <ArrowRight className="h-4 w-4" />
                         </Link>
                       </Button>
                       <Button asChild variant="outline" className="rounded-xl">
-                        <Link href={`/register?next=${returnPath}`}>
+                        <Link
+                          href={`/register?next=${returnPath}&email=${encodeURIComponent(invite.email)}`}
+                        >
                           Create account
                         </Link>
                       </Button>
@@ -147,10 +156,14 @@ export default async function InvitePage({ params }: InvitePageProps) {
                   </Button>
                 ) : invite.revokedAt || invite.isExpired ? (
                   <p className="text-sm text-[var(--on-surface-variant)]">
-                    This invite can no longer be accepted. Contact the org admin for a new invite.
+                    This invite can no longer be accepted. Contact the org admin
+                    for a new invite.
                   </p>
                 ) : (
-                  <AcceptInviteActions token={token} mismatchedEmail={mismatchedEmail} />
+                  <AcceptInviteActions
+                    token={token}
+                    mismatchedEmail={mismatchedEmail}
+                  />
                 )}
               </div>
             </section>
@@ -163,11 +176,13 @@ export default async function InvitePage({ params }: InvitePageProps) {
                 </p>
               </div>
               <p className="mt-3 text-sm text-[var(--on-surface-variant)]">
-                Access only applies to {invite.organizationName}. It will not grant visibility into any other organization.
+                Access only applies to {invite.organizationName}. It will not
+                grant visibility into any other organization.
               </p>
               {mismatchedEmail ? (
                 <p className="mt-4 rounded-2xl bg-[var(--error-container)] px-4 py-3 text-sm text-[var(--error)]">
-                  You are signed in as {session?.user?.email}. Switch accounts to accept this invite with {invite.email}.
+                  You are signed in as {session?.user?.email}. Switch accounts
+                  to accept this invite with {invite.email}.
                 </p>
               ) : null}
             </section>
