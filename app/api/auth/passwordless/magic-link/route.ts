@@ -6,6 +6,15 @@ import { safeRedirectPath } from "@/lib/redirect-path";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 import { sendMagicLinkEmail } from "@/lib/server/magic-link-email";
 
+export const magicLinkRouteDeps = {
+  auth,
+  createRequestLogger,
+  writeLog,
+  handleRouteError,
+  createSupabaseAdminClient,
+  sendMagicLinkEmail,
+};
+
 export const runtime = "nodejs";
 
 type RequestBody = {
@@ -84,7 +93,7 @@ async function hasRegisteredAuthUser(
 }
 
 export async function POST(req: Request) {
-  const logger = createRequestLogger(req, {
+  const logger = magicLinkRouteDeps.createRequestLogger(req, {
     route: "api.auth.passwordless.magic-link.post",
   });
 
@@ -95,7 +104,7 @@ export async function POST(req: Request) {
     body = {};
   }
 
-  const session = await auth();
+  const session = await magicLinkRouteDeps.auth();
   const sessionEmail = normalizeEmail(session?.user?.email ?? null);
   const requestedEmail = normalizeEmail(body.email);
   const email = requestedEmail ?? sessionEmail;
@@ -108,7 +117,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const supabase = createSupabaseAdminClient();
+    const supabase = magicLinkRouteDeps.createSupabaseAdminClient();
     const isRegistered = await hasRegisteredAuthUser(supabase, email);
     if (!isRegistered) {
       return NextResponse.json(
@@ -132,7 +141,7 @@ export async function POST(req: Request) {
       });
 
     if (linkError || !linkData?.properties?.action_link) {
-      writeLog(logger, "error", "Magic link generation failed", {
+      magicLinkRouteDeps.writeLog(logger, "error", "Magic link generation failed", {
         email,
         error: linkError?.message ?? "No action_link returned",
       });
@@ -142,14 +151,14 @@ export async function POST(req: Request) {
       );
     }
 
-    await sendMagicLinkEmail({
+    await magicLinkRouteDeps.sendMagicLinkEmail({
       toEmail: email,
       magicLink: linkData.properties.action_link,
     });
 
     return NextResponse.json({ message: SUCCESS_MESSAGE }, { status: 200 });
   } catch (error: unknown) {
-    return handleRouteError(error, {
+    return magicLinkRouteDeps.handleRouteError(error, {
       request: req,
       logger,
       fallbackMessage: "Failed to send magic link",

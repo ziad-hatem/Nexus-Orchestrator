@@ -9,6 +9,13 @@ import {
   normalizeOptionalText,
 } from "@/lib/server/validation";
 
+export const meProfileRouteDeps = {
+  auth,
+  createRequestLogger,
+  handleRouteError,
+  createSupabaseAdminClient,
+};
+
 type UserRow = {
   id: string;
   name: string | null;
@@ -119,8 +126,8 @@ async function ensureUserRow(params: {
 }
 
 export async function GET(req: Request) {
-  const session = await auth();
-  const logger = createRequestLogger(req, {
+  const session = await meProfileRouteDeps.auth();
+  const logger = meProfileRouteDeps.createRequestLogger(req, {
     route: "api.me.profile.get",
     userId: session?.user?.id ?? null,
     email: session?.user?.email ?? null,
@@ -130,7 +137,7 @@ export async function GET(req: Request) {
   }
 
   try {
-    const supabase = createSupabaseAdminClient();
+    const supabase = meProfileRouteDeps.createSupabaseAdminClient();
     const { data: authUserResult, error: authUserError } =
       await supabase.auth.admin.getUserById(session.user.id);
 
@@ -163,7 +170,7 @@ export async function GET(req: Request) {
       { status: 200 },
     );
   } catch (error: unknown) {
-    return handleRouteError(error, {
+    return meProfileRouteDeps.handleRouteError(error, {
       request: req,
       logger,
       fallbackMessage: "Failed to load profile",
@@ -176,8 +183,8 @@ export async function GET(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  const session = await auth();
-  const logger = createRequestLogger(req, {
+  const session = await meProfileRouteDeps.auth();
+  const logger = meProfileRouteDeps.createRequestLogger(req, {
     route: "api.me.profile.patch",
     userId: session?.user?.id ?? null,
     email: session?.user?.email ?? null,
@@ -273,7 +280,7 @@ export async function PATCH(req: Request) {
   }
 
   try {
-    const supabase = createSupabaseAdminClient();
+    const supabase = meProfileRouteDeps.createSupabaseAdminClient();
 
     const ensured = await ensureUserRow({
       supabase,
@@ -442,7 +449,7 @@ export async function PATCH(req: Request) {
       { status: 200 },
     );
   } catch (error: unknown) {
-    return handleRouteError(error, {
+    return meProfileRouteDeps.handleRouteError(error, {
       request: req,
       logger,
       fallbackMessage: "Failed to update profile",

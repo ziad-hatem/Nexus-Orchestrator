@@ -7,21 +7,31 @@ import { listOrganizationMembers } from "@/lib/server/membership-service";
 import { canManageMembers } from "@/lib/server/permissions";
 import { memberFilterSchema } from "@/lib/server/validation";
 
+export const orgMembersRouteDeps = {
+  auth,
+  createRequestLogger,
+  handleRouteError,
+  getApiOrgAccess,
+  listOrganizationMembers,
+  canManageMembers,
+  memberFilterSchema,
+};
+
 type RouteContext = {
   params: Promise<{ orgSlug: string }>;
 };
 
 export async function GET(req: Request, { params }: RouteContext) {
-  const session = await auth();
+  const session = await orgMembersRouteDeps.auth();
   const { orgSlug } = await params;
-  const logger = createRequestLogger(req, {
+  const logger = orgMembersRouteDeps.createRequestLogger(req, {
     route: "api.orgs.members.get",
     organizationSlug: orgSlug,
     userId: session?.user?.id ?? null,
   });
 
   try {
-    const access = await getApiOrgAccess({
+    const access = await orgMembersRouteDeps.getApiOrgAccess({
       orgSlug,
       userId: session?.user?.id,
     });
@@ -29,12 +39,12 @@ export async function GET(req: Request, { params }: RouteContext) {
     if (!access.ok) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
-    if (!canManageMembers(access.context.membership.role)) {
+    if (!orgMembersRouteDeps.canManageMembers(access.context.membership.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const searchParams = new URL(req.url).searchParams;
-    const parsedFilters = memberFilterSchema.safeParse({
+    const parsedFilters = orgMembersRouteDeps.memberFilterSchema.safeParse({
       query: searchParams.get("query") ?? undefined,
       role: searchParams.get("role") ?? undefined,
       status: searchParams.get("status") ?? undefined,
@@ -47,14 +57,14 @@ export async function GET(req: Request, { params }: RouteContext) {
       );
     }
 
-    const { members, invites } = await listOrganizationMembers(
+    const { members, invites } = await orgMembersRouteDeps.listOrganizationMembers(
       access.context.organization.id,
       parsedFilters.data,
     );
 
     return NextResponse.json({ members, invites }, { status: 200 });
   } catch (error: unknown) {
-    return handleRouteError(error, {
+    return orgMembersRouteDeps.handleRouteError(error, {
       request: req,
       logger,
       fallbackMessage: "Failed to load organization members",

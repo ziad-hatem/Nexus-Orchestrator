@@ -8,13 +8,20 @@ import {
   ACTIVE_ORG_COOKIE_MAX_AGE_SECONDS,
 } from "@/lib/topbar/constants";
 
+export const inviteAcceptRouteDeps = {
+  auth,
+  createRequestLogger,
+  handleRouteError,
+  acceptOrganizationInvite,
+};
+
 type RouteContext = {
   params: Promise<{ token: string }>;
 };
 
 export async function POST(req: Request, { params }: RouteContext) {
-  const session = await auth();
-  const logger = createRequestLogger(req, {
+  const session = await inviteAcceptRouteDeps.auth();
+  const logger = inviteAcceptRouteDeps.createRequestLogger(req, {
     route: "api.invites.accept.post",
     userId: session?.user?.id ?? null,
   });
@@ -25,7 +32,7 @@ export async function POST(req: Request, { params }: RouteContext) {
   const { token } = await params;
 
   try {
-    const acceptedInvite = await acceptOrganizationInvite({
+    const acceptedInvite = await inviteAcceptRouteDeps.acceptOrganizationInvite({
       token,
       userId: session.user.id,
       request: req,
@@ -61,7 +68,7 @@ export async function POST(req: Request, { params }: RouteContext) {
             ? 409
           : 500;
 
-    return handleRouteError(error, {
+    return inviteAcceptRouteDeps.handleRouteError(error, {
       request: req,
       logger,
       fallbackMessage: "Failed to accept invite",

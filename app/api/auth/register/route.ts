@@ -11,8 +11,43 @@ import {
   getSupabaseUrl,
 } from "@/lib/env";
 
+async function sendVerificationEmail(params: {
+  email: string;
+  firstName: string;
+  verificationLink: string;
+}): Promise<{ error: { message?: string } | null }> {
+  const resend = new Resend(getRequiredEnv("RESEND_API_KEY"));
+  const { error } = await resend.emails.send({
+    from:
+      process.env.RESEND_FROM_EMAIL ??
+      "Nexus Orchestrator <onboarding@resend.dev>",
+    to: [params.email],
+    subject: "Verify your Nexus Orchestrator account",
+    react: await VerificationEmail({
+      email: params.email,
+      firstName: params.firstName,
+      verificationLink: params.verificationLink,
+    }),
+  });
+
+  return {
+    error: error ?? null,
+  };
+}
+
+export const registerRouteDeps = {
+  createRequestLogger,
+  writeLog,
+  handleRouteError,
+  createClient,
+  getSupabaseServiceRoleKey,
+  getSupabaseUrl,
+  getRequiredEnv,
+  sendVerificationEmail,
+};
+
 export async function POST(req: Request) {
-  const logger = createRequestLogger(req, {
+  const logger = registerRouteDeps.createRequestLogger(req, {
     route: "api.auth.register.post",
   });
 
@@ -28,15 +63,18 @@ export async function POST(req: Request) {
     }
 
     const redirectPath = safeRedirectPath(next) ?? "/";
-    const verificationUrl = new URL("/login", getRequiredEnv("NEXTAUTH_URL"));
+    const verificationUrl = new URL(
+      "/login",
+      registerRouteDeps.getRequiredEnv("NEXTAUTH_URL"),
+    );
     verificationUrl.searchParams.set("verified", "true");
     if (redirectPath !== "/") {
       verificationUrl.searchParams.set("next", redirectPath);
     }
 
-    const supabaseAdmin = createClient(
-      getSupabaseUrl(),
-      getSupabaseServiceRoleKey(),
+    const supabaseAdmin = registerRouteDeps.createClient(
+      registerRouteDeps.getSupabaseUrl(),
+      registerRouteDeps.getSupabaseServiceRoleKey(),
     );
 
     // Generate a signup link via the Supabase Admin API to use with Resend
@@ -64,24 +102,21 @@ export async function POST(req: Request) {
 
     // Try sending email if registration link was generated successfully
     try {
-      const resend = new Resend(getRequiredEnv("RESEND_API_KEY"));
-      const { error: emailError } = await resend.emails.send({
-        from:
-          process.env.RESEND_FROM_EMAIL ??
-          "Nexus Orchestrator <onboarding@resend.dev>",
-        to: [email],
-        subject: "Verify your Nexus Orchestrator account",
-        react: await VerificationEmail({ email, firstName, verificationLink }),
-      });
+      const { error: emailError } =
+        await registerRouteDeps.sendVerificationEmail({
+          email,
+          firstName,
+          verificationLink,
+        });
 
       if (emailError) {
-        writeLog(logger, "warn", "Failed to send verification email", {
+        registerRouteDeps.writeLog(logger, "warn", "Failed to send verification email", {
           email,
           emailError,
         });
       }
     } catch (emailException) {
-      writeLog(logger, "warn", "Verification email delivery threw an exception", {
+      registerRouteDeps.writeLog(logger, "warn", "Verification email delivery threw an exception", {
         email,
         error: emailException instanceof Error
           ? {
@@ -98,7 +133,7 @@ export async function POST(req: Request) {
       { status: 201 },
     );
   } catch (err: unknown) {
-    return handleRouteError(err, {
+    return registerRouteDeps.handleRouteError(err, {
       request: req,
       logger,
       fallbackMessage: "Internal server error",

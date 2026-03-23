@@ -24,6 +24,10 @@ class MfaRequired extends CredentialsSignin {
   code = "mfa_required";
 }
 
+class AccessCheckFailed extends CredentialsSignin {
+  code = "access_check_failed";
+}
+
 class InvalidPasskeyAssertion extends CredentialsSignin {
   code = "invalid_passkey_assertion";
 }
@@ -48,7 +52,7 @@ async function assertHasActiveMembership(userId: string): Promise<void> {
       },
       "Failed to load membership access summary",
     );
-    return;
+    throw new AccessCheckFailed();
   }
 
   if (accessResult.summary.hasOnlySuspendedMemberships) {

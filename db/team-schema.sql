@@ -43,8 +43,15 @@ create table if not exists public.organization_invites (
 create index if not exists organization_invites_org_idx
   on public.organization_invites (organization_id);
 
+create unique index if not exists organization_invites_active_org_email_uidx
+  on public.organization_invites (organization_id, email)
+  where accepted_at is null and revoked_at is null;
+
 create index if not exists organization_invites_org_email_idx
   on public.organization_invites (organization_id, email);
+
+create unique index if not exists organization_invites_token_hash_uidx
+  on public.organization_invites (token_hash);
 
 create index if not exists organization_invites_expires_idx
   on public.organization_invites (expires_at);

@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
+export const oauthAccountCheckRouteDeps = {
+  createSupabaseAdminClient,
+};
+
 type AccountCheckBody = {
   accessToken?: unknown;
 };
@@ -53,7 +57,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const supabase = createSupabaseAdminClient();
+    const supabase = oauthAccountCheckRouteDeps.createSupabaseAdminClient();
     const { data: userResult, error: userError } = await supabase.auth.getUser(
       accessToken,
     );
@@ -120,4 +124,3 @@ export async function POST(req: Request) {
     );
   }
 }
-

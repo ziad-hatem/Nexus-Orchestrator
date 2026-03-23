@@ -10,6 +10,13 @@ import {
 } from "@/lib/server/permissions";
 import { normalizeEmail } from "@/lib/server/validation";
 
+export const inviteServiceDeps = {
+  createSupabaseAdminClient,
+  writeAuditLog,
+  randomBytes,
+  sendOrganizationInviteEmail,
+};
+
 type OrganizationInviteRow = {
   id: string;
   organization_id: string;
@@ -79,6 +86,16 @@ function hashInviteToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
+function isDuplicateInviteError(message: string): boolean {
+  const lowered = message.toLowerCase();
+  return lowered.includes("duplicate") || lowered.includes("unique");
+}
+
+function isDuplicateMembershipError(message: string): boolean {
+  const lowered = message.toLowerCase();
+  return lowered.includes("duplicate") || lowered.includes("unique");
+}
+
 async function sendOrganizationInviteEmail(params: {
   toEmail: string;
   inviteLink: string;
@@ -109,7 +126,7 @@ async function sendOrganizationInviteEmail(params: {
 }
 
 async function loadOrganization(organizationId: string): Promise<OrganizationRow> {
-  const supabase = createSupabaseAdminClient();
+  const supabase = inviteServiceDeps.createSupabaseAdminClient();
   const { data, error } = await supabase
     .from("organizations")
     .select("id, name, slug")
@@ -127,7 +144,7 @@ async function upsertMembershipFromInvite(params: {
   invite: OrganizationInviteRow;
   userId: string;
 }): Promise<MembershipRow> {
-  const supabase = createSupabaseAdminClient();
+  const supabase = inviteServiceDeps.createSupabaseAdminClient();
   const nowIso = new Date().toISOString();
 
   const { data: existingMembership, error: membershipError } = await supabase
@@ -176,6 +193,26 @@ async function upsertMembershipFromInvite(params: {
     .single<MembershipRow>();
 
   if (insertError || !insertedMembership) {
+    if (isDuplicateMembershipError(insertError?.message ?? "")) {
+      const { data: duplicatedMembership, error: duplicatedMembershipError } =
+        await supabase
+          .from("organization_memberships")
+          .select("id, user_id, organization_id, role, status, joined_at")
+          .eq("organization_id", params.invite.organization_id)
+          .eq("user_id", params.userId)
+          .maybeSingle<MembershipRow>();
+
+      if (duplicatedMembershipError) {
+        throw new Error(
+          `Failed to reload membership from invite: ${duplicatedMembershipError.message}`,
+        );
+      }
+
+      if (duplicatedMembership) {
+        return duplicatedMembership;
+      }
+    }
+
     throw new Error(
       `Failed to create membership from invite: ${insertError?.message ?? "Unknown error"}`,
     );
@@ -184,20 +221,46 @@ async function upsertMembershipFromInvite(params: {
   return insertedMembership;
 }
 
-async function markInviteAccepted(inviteId: string): Promise<void> {
-  const supabase = createSupabaseAdminClient();
-  const { error } = await supabase
+async function markInviteAccepted(inviteId: string): Promise<boolean> {
+  const supabase = inviteServiceDeps.createSupabaseAdminClient();
+  const { data, error } = await supabase
     .from("organization_invites")
     .update({ accepted_at: new Date().toISOString() })
-    .eq("id", inviteId);
+    .eq("id", inviteId)
+    .is("accepted_at", null)
+    .is("revoked_at", null)
+    .select("id")
+    .maybeSingle<{ id: string }>();
 
   if (error) {
     throw new Error(`Failed to mark invite accepted: ${error.message}`);
   }
+
+  return Boolean(data?.id);
+}
+
+async function revokeExpiredPendingInvites(params: {
+  organizationId: string;
+  email: string;
+  nowIso: string;
+}): Promise<void> {
+  const supabase = inviteServiceDeps.createSupabaseAdminClient();
+  const { error } = await supabase
+    .from("organization_invites")
+    .update({ revoked_at: params.nowIso })
+    .eq("organization_id", params.organizationId)
+    .eq("email", params.email)
+    .is("accepted_at", null)
+    .is("revoked_at", null)
+    .lt("expires_at", params.nowIso);
+
+  if (error) {
+    throw new Error(`Failed to revoke expired invites: ${error.message}`);
+  }
 }
 
 export async function previewInviteByToken(token: string): Promise<InvitePreview | null> {
-  const supabase = createSupabaseAdminClient();
+  const supabase = inviteServiceDeps.createSupabaseAdminClient();
   const tokenHash = hashInviteToken(token);
   const { data: invite, error } = await supabase
     .from("organization_invites")
@@ -239,13 +302,19 @@ export async function createOrganizationInvite(params: {
   role: OrganizationRole;
   request?: Request | null;
 }): Promise<InvitePreview> {
-  const supabase = createSupabaseAdminClient();
+  const supabase = inviteServiceDeps.createSupabaseAdminClient();
   const email = normalizeEmail(params.email);
   if (!email) {
     throw new Error("A valid invite email is required.");
   }
 
   const organization = await loadOrganization(params.organizationId);
+  const nowIso = new Date().toISOString();
+  await revokeExpiredPendingInvites({
+    organizationId: params.organizationId,
+    email,
+    nowIso,
+  });
 
   const { data: pendingInvites, error: pendingInvitesError } = await supabase
     .from("organization_invites")
@@ -296,7 +365,7 @@ export async function createOrganizationInvite(params: {
     }
   }
 
-  const token = randomBytes(24).toString("hex");
+  const token = inviteServiceDeps.randomBytes(24).toString("hex");
   const tokenHash = hashInviteToken(token);
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
@@ -317,13 +386,17 @@ export async function createOrganizationInvite(params: {
     .single<OrganizationInviteRow>();
 
   if (insertError || !createdInvite) {
+    if (isDuplicateInviteError(insertError?.message ?? "")) {
+      throw new Error("An active invitation already exists for this email.");
+    }
+
     throw new Error(
       `Failed to create invite: ${insertError?.message ?? "Unknown error"}`,
     );
   }
 
   const inviteLink = `${getAppBaseUrl()}/invite/${token}`;
-  await sendOrganizationInviteEmail({
+  await inviteServiceDeps.sendOrganizationInviteEmail({
     toEmail: email,
     inviteLink,
     organizationName: organization.name,
@@ -331,7 +404,7 @@ export async function createOrganizationInvite(params: {
     inviteeName: params.name ?? null,
   });
 
-  await writeAuditLog({
+  await inviteServiceDeps.writeAuditLog({
     organizationId: params.organizationId,
     actorUserId: params.actorUserId,
     action: "invite.sent",
@@ -383,7 +456,7 @@ export async function acceptOrganizationInvite(params: {
     throw new Error("This invite has expired.");
   }
 
-  const supabase = createSupabaseAdminClient();
+  const supabase = inviteServiceDeps.createSupabaseAdminClient();
   const { data: authUser, error: authUserError } = await supabase.auth.admin.getUserById(
     params.userId,
   );
@@ -412,20 +485,22 @@ export async function acceptOrganizationInvite(params: {
     invite,
     userId: params.userId,
   });
-  await markInviteAccepted(invite.id);
+  const acceptedNow = await markInviteAccepted(invite.id);
 
-  await writeAuditLog({
-    organizationId: preview.organizationId,
-    actorUserId: params.userId,
-    action: "invite.accepted",
-    entityType: "invite",
-    entityId: invite.id,
-    metadata: {
-      email: invite.email,
-      role: invite.role,
-    },
-    request: params.request,
-  });
+  if (acceptedNow) {
+    await inviteServiceDeps.writeAuditLog({
+      organizationId: preview.organizationId,
+      actorUserId: params.userId,
+      action: "invite.accepted",
+      entityType: "invite",
+      entityId: invite.id,
+      metadata: {
+        email: invite.email,
+        role: invite.role,
+      },
+      request: params.request,
+    });
+  }
 
   return {
     organizationSlug: preview.organizationSlug,
@@ -441,7 +516,7 @@ export async function claimPendingInvitesForUser(
     return;
   }
 
-  const supabase = createSupabaseAdminClient();
+  const supabase = inviteServiceDeps.createSupabaseAdminClient();
   const { data: invites, error } = await supabase
     .from("organization_invites")
     .select(
@@ -462,18 +537,20 @@ export async function claimPendingInvitesForUser(
 
   for (const invite of claimableInvites) {
     await upsertMembershipFromInvite({ invite, userId: user.id });
-    await markInviteAccepted(invite.id);
-    await writeAuditLog({
-      organizationId: invite.organization_id,
-      actorUserId: user.id,
-      action: "invite.accepted",
-      entityType: "invite",
-      entityId: invite.id,
-      metadata: {
-        email: invite.email,
-        role: invite.role,
-        claimedDuringBootstrap: true,
-      },
-    });
+    const acceptedNow = await markInviteAccepted(invite.id);
+    if (acceptedNow) {
+      await inviteServiceDeps.writeAuditLog({
+        organizationId: invite.organization_id,
+        actorUserId: user.id,
+        action: "invite.accepted",
+        entityType: "invite",
+        entityId: invite.id,
+        metadata: {
+          email: invite.email,
+          role: invite.role,
+          claimedDuringBootstrap: true,
+        },
+      });
+    }
   }
 }

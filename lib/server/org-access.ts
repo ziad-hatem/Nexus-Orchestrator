@@ -14,6 +14,17 @@ import {
 } from "@/lib/server/org-service";
 import { forbidden, notFound, unauthorized } from "next/navigation";
 
+export const orgAccessDeps = {
+  auth,
+  applyMonitoringContext,
+  getRolePermissions,
+  getOrganizationBySlug,
+  listUserOrganizations,
+  forbidden,
+  notFound,
+  unauthorized,
+};
+
 export type OrgAccessContext = {
   userId: string;
   organization: OrganizationRecord;
@@ -41,12 +52,12 @@ async function resolveOrgAccessContext(
   userId: string,
   orgSlug: string,
 ): Promise<OrgAccessContext | null> {
-  const organization = await getOrganizationBySlug(orgSlug);
+  const organization = await orgAccessDeps.getOrganizationBySlug(orgSlug);
   if (!organization) {
     return null;
   }
 
-  const memberships = await listUserOrganizations(userId);
+  const memberships = await orgAccessDeps.listUserOrganizations(userId);
   const membership = memberships.find(
     (candidate) => candidate.organizationId === organization.id,
   );
@@ -66,7 +77,7 @@ async function resolveOrgAccessContext(
         joinedAt: null,
         createdAt: organization.created_at,
       } satisfies MembershipRecord),
-      permissions: getRolePermissions(membership?.role ?? "viewer"),
+      permissions: orgAccessDeps.getRolePermissions(membership?.role ?? "viewer"),
     };
   }
 
@@ -74,7 +85,7 @@ async function resolveOrgAccessContext(
     userId,
     organization,
     membership,
-    permissions: getRolePermissions(membership.role),
+    permissions: orgAccessDeps.getRolePermissions(membership.role),
   };
 }
 
@@ -84,25 +95,30 @@ export async function requirePageOrgAccess(
   orgSlug: string,
   authorize?: (context: OrgAccessContext) => boolean,
 ): Promise<OrgAccessContext> {
-  const session = await auth();
-  if (!session?.user?.id) {
-    unauthorized();
+  const session = await orgAccessDeps.auth();
+  const userId = session?.user?.id;
+  if (!userId) {
+    orgAccessDeps.unauthorized();
+    throw new Error("Unreachable unauthorized org access state");
   }
 
-  const context = await getCachedOrgAccess(session.user.id, orgSlug);
+  const context = await getCachedOrgAccess(userId, orgSlug);
   if (!context) {
-    notFound();
+    orgAccessDeps.notFound();
+    throw new Error("Unreachable missing organization state");
   }
 
   if (context.membership.membershipId === "" || context.membership.status !== "active") {
-    forbidden();
+    orgAccessDeps.forbidden();
+    throw new Error("Unreachable forbidden organization state");
   }
 
   if (authorize && !authorize(context)) {
-    forbidden();
+    orgAccessDeps.forbidden();
+    throw new Error("Unreachable role authorization state");
   }
 
-  applyMonitoringContext({
+  orgAccessDeps.applyMonitoringContext({
     userId: context.userId,
     organizationId: context.organization.id,
     organizationSlug: context.organization.slug,
@@ -125,7 +141,7 @@ export async function getApiOrgAccess(params: {
     };
   }
 
-  const organization = await getOrganizationBySlug(params.orgSlug);
+  const organization = await orgAccessDeps.getOrganizationBySlug(params.orgSlug);
   if (!organization) {
     return {
       ok: false,
@@ -134,7 +150,7 @@ export async function getApiOrgAccess(params: {
     };
   }
 
-  const memberships = await listUserOrganizations(params.userId);
+  const memberships = await orgAccessDeps.listUserOrganizations(params.userId);
   const membership = memberships.find(
     (candidate) => candidate.organizationId === organization.id,
   );
@@ -147,7 +163,7 @@ export async function getApiOrgAccess(params: {
     };
   }
 
-  applyMonitoringContext({
+  orgAccessDeps.applyMonitoringContext({
     userId: params.userId,
     organizationId: organization.id,
     organizationSlug: organization.slug,
@@ -161,7 +177,7 @@ export async function getApiOrgAccess(params: {
       userId: params.userId,
       organization,
       membership,
-      permissions: getRolePermissions(membership.role),
+      permissions: orgAccessDeps.getRolePermissions(membership.role),
     },
   };
 }

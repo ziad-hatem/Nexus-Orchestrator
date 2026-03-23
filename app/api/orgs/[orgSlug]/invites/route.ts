@@ -8,21 +8,33 @@ import { listOrganizationMembers } from "@/lib/server/membership-service";
 import { canCreateInvites } from "@/lib/server/permissions";
 import { createInviteSchema, memberFilterSchema } from "@/lib/server/validation";
 
+export const orgInvitesRouteDeps = {
+  auth,
+  createRequestLogger,
+  handleRouteError,
+  getApiOrgAccess,
+  createOrganizationInvite,
+  listOrganizationMembers,
+  canCreateInvites,
+  createInviteSchema,
+  memberFilterSchema,
+};
+
 type RouteContext = {
   params: Promise<{ orgSlug: string }>;
 };
 
 export async function GET(req: Request, { params }: RouteContext) {
-  const session = await auth();
+  const session = await orgInvitesRouteDeps.auth();
   const { orgSlug } = await params;
-  const logger = createRequestLogger(req, {
+  const logger = orgInvitesRouteDeps.createRequestLogger(req, {
     route: "api.orgs.invites.get",
     organizationSlug: orgSlug,
     userId: session?.user?.id ?? null,
   });
 
   try {
-    const access = await getApiOrgAccess({
+    const access = await orgInvitesRouteDeps.getApiOrgAccess({
       orgSlug,
       userId: session?.user?.id,
     });
@@ -30,12 +42,12 @@ export async function GET(req: Request, { params }: RouteContext) {
     if (!access.ok) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
-    if (!canCreateInvites(access.context.membership.role)) {
+    if (!orgInvitesRouteDeps.canCreateInvites(access.context.membership.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const searchParams = new URL(req.url).searchParams;
-    const parsedFilters = memberFilterSchema.safeParse({
+    const parsedFilters = orgInvitesRouteDeps.memberFilterSchema.safeParse({
       query: searchParams.get("query") ?? undefined,
       role: searchParams.get("role") ?? undefined,
       status: undefined,
@@ -48,14 +60,14 @@ export async function GET(req: Request, { params }: RouteContext) {
       );
     }
 
-    const { invites } = await listOrganizationMembers(
+    const { invites } = await orgInvitesRouteDeps.listOrganizationMembers(
       access.context.organization.id,
       parsedFilters.data,
     );
 
     return NextResponse.json({ invites }, { status: 200 });
   } catch (error: unknown) {
-    return handleRouteError(error, {
+    return orgInvitesRouteDeps.handleRouteError(error, {
       request: req,
       logger,
       fallbackMessage: "Failed to load organization invites",
@@ -68,9 +80,9 @@ export async function GET(req: Request, { params }: RouteContext) {
 }
 
 export async function POST(req: Request, { params }: RouteContext) {
-  const session = await auth();
+  const session = await orgInvitesRouteDeps.auth();
   const { orgSlug } = await params;
-  const logger = createRequestLogger(req, {
+  const logger = orgInvitesRouteDeps.createRequestLogger(req, {
     route: "api.orgs.invites.post",
     organizationSlug: orgSlug,
     userId: session?.user?.id ?? null,
@@ -83,7 +95,7 @@ export async function POST(req: Request, { params }: RouteContext) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const parsed = createInviteSchema.safeParse(body);
+  const parsed = orgInvitesRouteDeps.createInviteSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
       { error: parsed.error.issues[0]?.message ?? "Invalid invite request" },
@@ -92,7 +104,7 @@ export async function POST(req: Request, { params }: RouteContext) {
   }
 
   try {
-    const access = await getApiOrgAccess({
+    const access = await orgInvitesRouteDeps.getApiOrgAccess({
       orgSlug,
       userId: session?.user?.id,
     });
@@ -100,11 +112,11 @@ export async function POST(req: Request, { params }: RouteContext) {
     if (!access.ok) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
-    if (!canCreateInvites(access.context.membership.role)) {
+    if (!orgInvitesRouteDeps.canCreateInvites(access.context.membership.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const invite = await createOrganizationInvite({
+    const invite = await orgInvitesRouteDeps.createOrganizationInvite({
       organizationId: access.context.organization.id,
       actorUserId: access.context.userId,
       email: parsed.data.email,
@@ -121,7 +133,7 @@ export async function POST(req: Request, { params }: RouteContext) {
       message.includes("already exists") || message.includes("already a member")
         ? 409
         : 500;
-    return handleRouteError(error, {
+    return orgInvitesRouteDeps.handleRouteError(error, {
       request: req,
       logger,
       fallbackMessage: "Failed to create invite",

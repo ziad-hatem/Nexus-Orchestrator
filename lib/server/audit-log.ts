@@ -5,6 +5,10 @@ import {
 } from "@/lib/observability/redaction";
 import { createSupabaseAdminClient } from "@/lib/supabase-admin";
 
+export const auditLogDeps = {
+  createSupabaseAdminClient,
+};
+
 export type AuditMetadata = Record<string, unknown>;
 
 export type AuditLogEntry = {
@@ -106,7 +110,7 @@ function extractUserAgent(request?: NextRequest | Request | null): string | null
 }
 
 export async function writeAuditLog(params: WriteAuditLogParams): Promise<void> {
-  const supabase = createSupabaseAdminClient();
+  const supabase = auditLogDeps.createSupabaseAdminClient();
   const metadata = redactRecord(params.metadata ?? {});
   const { error } = await supabase.from("audit_logs").insert({
     organization_id: params.organizationId,
@@ -192,7 +196,7 @@ export async function listAuditLogs(
   summary: AuditLogSummary;
   availableActions: string[];
 }> {
-  const supabase = createSupabaseAdminClient();
+  const supabase = auditLogDeps.createSupabaseAdminClient();
   const page = Math.max(1, filters.page);
   const pageSize = Math.max(1, Math.min(filters.pageSize, 50));
 

@@ -12,9 +12,18 @@ import {
   ACTIVE_ORG_COOKIE_MAX_AGE_SECONDS,
 } from "@/lib/topbar/constants";
 
+export const orgRouteDeps = {
+  auth,
+  createRequestLogger,
+  handleRouteError,
+  createOrganizationForUser,
+  listUserOrganizations,
+  createOrganizationSchema,
+};
+
 export async function GET(req: Request) {
-  const session = await auth();
-  const logger = createRequestLogger(req, {
+  const session = await orgRouteDeps.auth();
+  const logger = orgRouteDeps.createRequestLogger(req, {
     route: "api.orgs.get",
     userId: session?.user?.id ?? null,
   });
@@ -23,10 +32,10 @@ export async function GET(req: Request) {
   }
 
   try {
-    const organizations = await listUserOrganizations(session.user.id);
+    const organizations = await orgRouteDeps.listUserOrganizations(session.user.id);
     return NextResponse.json({ organizations }, { status: 200 });
   } catch (error: unknown) {
-    return handleRouteError(error, {
+    return orgRouteDeps.handleRouteError(error, {
       request: req,
       logger,
       fallbackMessage: "Failed to load organizations",
@@ -38,8 +47,8 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const session = await auth();
-  const logger = createRequestLogger(req, {
+  const session = await orgRouteDeps.auth();
+  const logger = orgRouteDeps.createRequestLogger(req, {
     route: "api.orgs.post",
     userId: session?.user?.id ?? null,
   });
@@ -54,7 +63,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const parsed = createOrganizationSchema.safeParse(body);
+  const parsed = orgRouteDeps.createOrganizationSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
       { error: parsed.error.issues[0]?.message ?? "Invalid organization input" },
@@ -63,7 +72,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const organization = await createOrganizationForUser({
+    const organization = await orgRouteDeps.createOrganizationForUser({
       userId: session.user.id,
       name: parsed.data.name,
       request: req,
@@ -85,7 +94,7 @@ export async function POST(req: Request) {
     });
     return response;
   } catch (error: unknown) {
-    return handleRouteError(error, {
+    return orgRouteDeps.handleRouteError(error, {
       request: req,
       logger,
       fallbackMessage: "Failed to create organization",

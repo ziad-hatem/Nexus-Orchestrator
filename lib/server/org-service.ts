@@ -6,6 +6,13 @@ import {
 } from "@/lib/server/permissions";
 import { normalizeOrgSlug } from "@/lib/server/validation";
 
+type SupabaseAdminClient = ReturnType<typeof createSupabaseAdminClient>;
+
+export const orgServiceDeps = {
+  createSupabaseAdminClient,
+  writeAuditLog,
+};
+
 export type OrganizationRecord = {
   id: string;
   name: string;
@@ -52,7 +59,7 @@ function isDuplicateSlugError(message: string): boolean {
 export async function getOrganizationBySlug(
   orgSlug: string,
 ): Promise<OrganizationRecord | null> {
-  const supabase = createSupabaseAdminClient();
+  const supabase = orgServiceDeps.createSupabaseAdminClient();
   const { data, error } = await supabase
     .from("organizations")
     .select("id, name, slug, logo_url, created_at, updated_at")
@@ -69,7 +76,7 @@ export async function getOrganizationBySlug(
 export async function listUserOrganizations(
   userId: string,
 ): Promise<UserOrganizationMembership[]> {
-  const supabase = createSupabaseAdminClient();
+  const supabase = orgServiceDeps.createSupabaseAdminClient();
   const { data: memberships, error: membershipsError } = await supabase
     .from("organization_memberships")
     .select("id, organization_id, role, status, joined_at, created_at, updated_at")
@@ -135,7 +142,7 @@ export async function listUserOrganizations(
 export async function createOrganizationWithUniqueSlug(
   name: string,
 ): Promise<OrganizationRecord> {
-  const supabase = createSupabaseAdminClient();
+  const supabase = orgServiceDeps.createSupabaseAdminClient();
   const baseSlug = normalizeOrgSlug(name);
 
   for (let attempt = 0; attempt < 25; attempt += 1) {
@@ -158,56 +165,71 @@ export async function createOrganizationWithUniqueSlug(
   throw new Error("Failed to reserve a unique organization slug.");
 }
 
+async function rollbackOrganizationCreation(
+  supabase: SupabaseAdminClient,
+  organizationId: string,
+): Promise<void> {
+  await supabase
+    .from("organizations")
+    .delete()
+    .eq("id", organizationId);
+}
+
 export async function createOrganizationForUser(params: {
   userId: string;
   name: string;
   request?: Request | null;
 }): Promise<UserOrganizationMembership> {
   const organization = await createOrganizationWithUniqueSlug(params.name);
-  const supabase = createSupabaseAdminClient();
+  const supabase = orgServiceDeps.createSupabaseAdminClient();
 
-  const { data: membership, error: membershipError } = await supabase
-    .from("organization_memberships")
-    .insert({
-      user_id: params.userId,
-      organization_id: organization.id,
-      role: "org_admin",
-      status: "active",
-      joined_at: new Date().toISOString(),
-    })
-    .select("id, organization_id, role, status, joined_at, created_at, updated_at")
-    .single<OrganizationMembershipRow>();
+  try {
+    const { data: membership, error: membershipError } = await supabase
+      .from("organization_memberships")
+      .insert({
+        user_id: params.userId,
+        organization_id: organization.id,
+        role: "org_admin",
+        status: "active",
+        joined_at: new Date().toISOString(),
+      })
+      .select("id, organization_id, role, status, joined_at, created_at, updated_at")
+      .single<OrganizationMembershipRow>();
 
-  if (membershipError || !membership) {
-    throw new Error(
-      `Failed to create organization membership: ${membershipError?.message ?? "Unknown error"}`,
-    );
-  }
+    if (membershipError || !membership) {
+      throw new Error(
+        `Failed to create organization membership: ${membershipError?.message ?? "Unknown error"}`,
+      );
+    }
 
-  await writeAuditLog({
-    organizationId: organization.id,
-    actorUserId: params.userId,
-    action: "organization.created",
-    entityType: "organization",
-    entityId: organization.id,
-    metadata: {
+    await orgServiceDeps.writeAuditLog({
+      organizationId: organization.id,
+      actorUserId: params.userId,
+      action: "organization.created",
+      entityType: "organization",
+      entityId: organization.id,
+      metadata: {
+        organizationName: organization.name,
+        organizationSlug: organization.slug,
+      },
+      request: params.request,
+    });
+
+    return {
+      membershipId: membership.id,
+      organizationId: organization.id,
       organizationName: organization.name,
       organizationSlug: organization.slug,
-    },
-    request: params.request,
-  });
-
-  return {
-    membershipId: membership.id,
-    organizationId: organization.id,
-    organizationName: organization.name,
-    organizationSlug: organization.slug,
-    organizationLogoUrl: organization.logo_url,
-    role: membership.role,
-    status: membership.status ?? "active",
-    joinedAt: membership.joined_at,
-    createdAt: membership.created_at,
-  };
+      organizationLogoUrl: organization.logo_url,
+      role: membership.role,
+      status: membership.status ?? "active",
+      joinedAt: membership.joined_at,
+      createdAt: membership.created_at,
+    };
+  } catch (error) {
+    await rollbackOrganizationCreation(supabase, organization.id);
+    throw error;
+  }
 }
 
 export async function getPostAuthRedirectPath(
@@ -242,7 +264,7 @@ export async function getPostAuthRedirectPath(
 export async function getOrganizationDashboardSummary(
   organizationId: string,
 ): Promise<DashboardSummary> {
-  const supabase = createSupabaseAdminClient();
+  const supabase = orgServiceDeps.createSupabaseAdminClient();
 
   const [
     membershipCountResult,

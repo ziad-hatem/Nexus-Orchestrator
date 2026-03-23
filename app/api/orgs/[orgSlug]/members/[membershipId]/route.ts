@@ -7,14 +7,24 @@ import { updateOrganizationMembership } from "@/lib/server/membership-service";
 import { canManageMembers } from "@/lib/server/permissions";
 import { updateMembershipSchema } from "@/lib/server/validation";
 
+export const orgMemberRouteDeps = {
+  auth,
+  createRequestLogger,
+  handleRouteError,
+  getApiOrgAccess,
+  updateOrganizationMembership,
+  canManageMembers,
+  updateMembershipSchema,
+};
+
 type RouteContext = {
   params: Promise<{ orgSlug: string; membershipId: string }>;
 };
 
 export async function PATCH(req: Request, { params }: RouteContext) {
-  const session = await auth();
+  const session = await orgMemberRouteDeps.auth();
   const { orgSlug, membershipId } = await params;
-  const logger = createRequestLogger(req, {
+  const logger = orgMemberRouteDeps.createRequestLogger(req, {
     route: "api.orgs.members.patch",
     organizationSlug: orgSlug,
     membershipId,
@@ -28,7 +38,7 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const parsed = updateMembershipSchema.safeParse(body);
+  const parsed = orgMemberRouteDeps.updateMembershipSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
       { error: parsed.error.issues[0]?.message ?? "Invalid membership update" },
@@ -37,7 +47,7 @@ export async function PATCH(req: Request, { params }: RouteContext) {
   }
 
   try {
-    const access = await getApiOrgAccess({
+    const access = await orgMemberRouteDeps.getApiOrgAccess({
       orgSlug,
       userId: session?.user?.id,
     });
@@ -45,11 +55,11 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     if (!access.ok) {
       return NextResponse.json({ error: access.error }, { status: access.status });
     }
-    if (!canManageMembers(access.context.membership.role)) {
+    if (!orgMemberRouteDeps.canManageMembers(access.context.membership.role)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const member = await updateOrganizationMembership({
+    const member = await orgMemberRouteDeps.updateOrganizationMembership({
       organizationId: access.context.organization.id,
       membershipId,
       actorUserId: access.context.userId,
@@ -70,7 +80,7 @@ export async function PATCH(req: Request, { params }: RouteContext) {
         : message.includes("at least one active org admin")
           ? 409
           : 500;
-    return handleRouteError(error, {
+    return orgMemberRouteDeps.handleRouteError(error, {
       request: req,
       logger,
       fallbackMessage: "Failed to update membership",

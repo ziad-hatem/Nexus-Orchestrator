@@ -6,6 +6,11 @@ import {
   type OrganizationRole,
 } from "@/lib/server/permissions";
 
+export const membershipServiceDeps = {
+  createSupabaseAdminClient,
+  writeAuditLog,
+};
+
 type MembershipRow = {
   id: string;
   user_id: string;
@@ -87,7 +92,7 @@ export async function listOrganizationMembers(
   members: OrganizationMember[];
   invites: PendingOrganizationInvite[];
 }> {
-  const supabase = createSupabaseAdminClient();
+  const supabase = membershipServiceDeps.createSupabaseAdminClient();
 
   const { data: memberships, error: membershipsError } = await supabase
     .from("organization_memberships")
@@ -191,7 +196,7 @@ export async function listOrganizationMembers(
 }
 
 async function countActiveAdmins(organizationId: string): Promise<number> {
-  const supabase = createSupabaseAdminClient();
+  const supabase = membershipServiceDeps.createSupabaseAdminClient();
   const { count, error } = await supabase
     .from("organization_memberships")
     .select("id", { count: "exact", head: true })
@@ -214,7 +219,7 @@ export async function updateOrganizationMembership(params: {
   status?: MembershipStatus;
   request?: Request | null;
 }): Promise<OrganizationMember> {
-  const supabase = createSupabaseAdminClient();
+  const supabase = membershipServiceDeps.createSupabaseAdminClient();
   const { data: membership, error: membershipError } = await supabase
     .from("organization_memberships")
     .select("id, user_id, organization_id, role, status, joined_at, created_at, updated_at")
@@ -266,8 +271,32 @@ export async function updateOrganizationMembership(params: {
     throw new Error(`Failed to update membership: ${updateError.message}`);
   }
 
+  if (removesAdminAccess) {
+    const remainingAdminCount = await countActiveAdmins(params.organizationId);
+    if (remainingAdminCount === 0) {
+      const { error: rollbackError } = await supabase
+        .from("organization_memberships")
+        .update({
+          role: membership.role,
+          status: currentStatus,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", membership.id);
+
+      if (rollbackError) {
+        throw new Error(
+          `Failed to restore organization admin access after concurrent update: ${rollbackError.message}`,
+        );
+      }
+
+      throw new Error(
+        "This organization must always have at least one active org admin.",
+      );
+    }
+  }
+
   if (membership.role !== nextRole) {
-    await writeAuditLog({
+    await membershipServiceDeps.writeAuditLog({
       organizationId: params.organizationId,
       actorUserId: params.actorUserId,
       action: "membership.role_changed",
@@ -283,7 +312,7 @@ export async function updateOrganizationMembership(params: {
   }
 
   if (currentStatus !== nextStatus) {
-    await writeAuditLog({
+    await membershipServiceDeps.writeAuditLog({
       organizationId: params.organizationId,
       actorUserId: params.actorUserId,
       action:
