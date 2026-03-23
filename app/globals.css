@@ -71,8 +71,8 @@
   --glass-border: rgba(192, 199, 211, 0.18);
   --glass-shadow: 0 12px 32px rgba(11, 28, 48, 0.06);
   --glass-shadow-soft: 0 12px 32px rgba(11, 28, 48, 0.04);
-  --auth-panel-start: rgba(255, 255, 255, 0.96);
-  --auth-panel-end: rgba(255, 255, 255, 0.99);
+  --auth-panel-start: rgba(255, 255, 255, 0.6);
+  --auth-panel-end: rgba(255, 255, 255, 0.75);
   --auth-grid-line: rgba(11, 28, 48, 0.045);
   --theme-control-bg: rgba(255, 255, 255, 0.84);
   --theme-control-border: rgba(192, 199, 211, 0.24);
@@ -143,8 +143,8 @@
   --glass-border: rgba(111, 130, 154, 0.2);
   --glass-shadow: 0 16px 42px rgba(0, 0, 0, 0.34);
   --glass-shadow-soft: 0 12px 32px rgba(0, 0, 0, 0.28);
-  --auth-panel-start: rgba(12, 22, 36, 0.92);
-  --auth-panel-end: rgba(12, 22, 36, 0.98);
+  --auth-panel-start: rgba(12, 22, 36, 0.55);
+  --auth-panel-end: rgba(12, 22, 36, 0.7);
   --auth-grid-line: rgba(159, 176, 196, 0.06);
   --theme-control-bg: rgba(9, 17, 29, 0.88);
   --theme-control-border: rgba(111, 130, 154, 0.24);
@@ -343,6 +343,8 @@
   );
   border: 1px solid var(--glass-border);
   box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
 }
 
 .auth-canvas {

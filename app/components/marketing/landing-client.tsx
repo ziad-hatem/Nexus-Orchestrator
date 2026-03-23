@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Network,
   Workflow,
@@ -11,6 +11,8 @@ import {
 } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import Link from "next/link";
+import { Canvas } from "@react-three/fiber";
+import { Particles } from "./medusae";
 
 const WordReveal = ({
   text,
@@ -83,9 +85,7 @@ function useLandingPerformanceMode() {
           ? Boolean(nav.connection.saveData)
           : false;
       const deviceMemory =
-        typeof nav.deviceMemory === "number"
-          ? nav.deviceMemory
-          : null;
+        typeof nav.deviceMemory === "number" ? nav.deviceMemory : null;
       const lowCoreCount =
         typeof navigator.hardwareConcurrency === "number" &&
         navigator.hardwareConcurrency > 0 &&
@@ -170,89 +170,119 @@ const Navbar = ({ constrainedMotion }: { constrainedMotion: boolean }) => {
   );
 };
 
-const Hero = ({ constrainedMotion }: { constrainedMotion: boolean }) => (
-  <section className="relative min-h-screen flex items-center pt-20 overflow-hidden">
-    <div className="absolute inset-0 z-0">
-      <div
-        className={`absolute top-0 left-1/2 -translate-x-1/2 pointer-events-none opacity-10 ${
-          constrainedMotion ? "h-full w-full" : "h-[120%] w-[120%]"
-        }`}
-      >
-        <div
-          className={`absolute inset-0 bg-[radial-gradient(circle_at_center,var(--color-primary)_0%,transparent_70%)] ${
-            constrainedMotion ? "blur-[56px]" : "blur-[120px]"
-          }`}
-        />
-      </div>
-      <div className="absolute inset-0 bg-linear-to-b from-transparent via-surface/50 to-surface" />
-    </div>
-
-    <div className="relative z-10 max-w-7xl mx-auto px-6 w-full">
-      <div className="max-w-4xl">
-        {constrainedMotion ? (
-          <span className="inline-block px-4 py-1.5 mb-8 text-[10px] font-bold tracking-[0.2em] uppercase bg-surface-container-high text-primary rounded-full">
-            Enterprise Automation OS
-          </span>
-        ) : (
-          <motion.span
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            className="inline-block px-4 py-1.5 mb-8 text-[10px] font-bold tracking-[0.2em] uppercase bg-surface-container-high text-primary rounded-full"
-          >
-            Enterprise Automation OS
-          </motion.span>
-        )}
-        <h1 className="text-6xl md:text-8xl font-black tracking-tight leading-none mb-8 text-on-surface">
-          <WordReveal
-            text="Architecting the Future of"
-            delay={0.2}
-            disabled={constrainedMotion}
-          />
-          <br className="hidden md:block" />
-          <WordReveal
-            text="Nexus Orchestrator"
-            delay={0.2 + 4 * 0.08}
-            wordClassName="text-gradient"
-            disabled={constrainedMotion}
-          />
-        </h1>
-        <div className="mb-12 max-w-2xl">
-          <WordReveal
-            text="Scale operations globally with high-performance multi-tenancy, sophisticated visual orchestration, and military-grade isolation."
-            delay={0.8}
-            className="text-xl md:text-2xl text-on-surface-variant leading-relaxed"
-            disabled={constrainedMotion}
-          />
-        </div>
-        {constrainedMotion ? (
-          <div className="flex flex-wrap gap-4">
-            <Link
-              href="/register"
-              className="premium-gradient text-(--on-primary) px-8 py-4 rounded-xl font-bold text-lg shadow-[0_12px_28px_rgba(0,95,158,0.18)] transition-opacity active:scale-95 inline-block"
-            >
-              Get Started
-            </Link>
-          </div>
-        ) : (
+const Hero = ({ constrainedMotion }: { constrainedMotion: boolean }) => {
+  const containerRef = useRef<HTMLElement>(null);
+  return (
+    <section
+      ref={containerRef}
+      className="relative min-h-screen flex items-center pt-20 overflow-hidden"
+    >
+      <div className="absolute inset-0 z-0 bg-(--surface)">
+        {!constrainedMotion && (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 1.8 }}
-            className="flex flex-wrap gap-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 2, delay: 1.5 }}
+            className="absolute inset-0 z-0 pointer-events-auto"
           >
-            <Link
-              href="/register"
-              className="premium-gradient text-(--on-primary) px-8 py-4 rounded-xl font-bold text-lg shadow-[0_12px_28px_rgba(0,95,158,0.18)] hover:scale-105 transition-transform active:scale-95 inline-block"
+            <Canvas
+              eventSource={containerRef as any}
+              camera={{ position: [0, 0, 5] }}
+              gl={{ alpha: true }}
             >
-              Get Started
-            </Link>
+              <Particles />
+            </Canvas>
           </motion.div>
         )}
+        <div
+          className={`absolute top-0 left-1/2 -translate-x-1/2 pointer-events-none opacity-10 ${
+            constrainedMotion ? "h-full w-full" : "h-[120%] w-[120%]"
+          }`}
+        >
+          <div
+            className={`absolute inset-0 bg-[radial-gradient(circle_at_center,var(--color-primary)_0%,transparent_70%)] ${
+              constrainedMotion ? "blur-[56px]" : "blur-[120px]"
+            }`}
+          />
+        </div>
+        <div className="absolute inset-0 bg-linear-to-b from-transparent via-surface/50 to-surface pointer-events-none" />
       </div>
-    </div>
-  </section>
-);
+
+      <div className="relative z-10 max-w-7xl mx-auto px-6 w-full pointer-events-none">
+        <div className="max-w-4xl">
+          {constrainedMotion ? (
+            <span className="inline-block px-4 py-1.5 mb-8 text-[10px] font-bold tracking-[0.2em] uppercase bg-surface-container-high text-primary rounded-full">
+              Enterprise Automation OS
+            </span>
+          ) : (
+            <motion.span
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6 }}
+              className="inline-block px-4 py-1.5 mb-8 text-[10px] font-bold tracking-[0.2em] uppercase bg-surface-container-high text-primary rounded-full"
+            >
+              Enterprise Automation OS
+            </motion.span>
+          )}
+          <h1 className="text-6xl md:text-8xl font-black tracking-tight leading-none mb-8 text-on-surface">
+            <WordReveal
+              text="Architecting the Future of"
+              delay={0.2}
+              disabled={constrainedMotion}
+            />
+            <br className="hidden md:block" />
+            <WordReveal
+              text="Nexus Orchestrator"
+              delay={0.2 + 4 * 0.08}
+              wordClassName="text-gradient"
+              disabled={constrainedMotion}
+            />
+          </h1>
+          {constrainedMotion ? (
+            <p className="text-xl md:text-2xl text-on-surface-variant mb-12 max-w-2xl leading-relaxed relative z-10">
+              Scale operations globally with high-performance multi-tenancy,
+              sophisticated visual orchestration, and military-grade isolation.
+            </p>
+          ) : (
+            <motion.p
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 1 }}
+              className="text-xl md:text-2xl text-on-surface-variant mb-12 max-w-2xl leading-relaxed relative z-10"
+            >
+              Scale operations globally with high-performance multi-tenancy,
+              sophisticated visual orchestration, and military-grade isolation.
+            </motion.p>
+          )}
+          {constrainedMotion ? (
+            <div className="flex flex-wrap gap-4 pointer-events-auto">
+              <Link
+                href="/register"
+                className="premium-gradient text-(--on-primary) px-8 py-4 rounded-xl font-bold text-lg shadow-[0_12px_28px_rgba(0,95,158,0.18)] transition-opacity active:scale-95 inline-block"
+              >
+                Get Started
+              </Link>
+            </div>
+          ) : (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 1.2 }}
+              className="flex flex-wrap gap-4 pointer-events-auto"
+            >
+              <Link
+                href="/register"
+                className="premium-gradient text-(--on-primary) px-8 py-4 rounded-xl font-bold text-lg shadow-[0_12px_28px_rgba(0,95,158,0.18)] hover:scale-105 transition-transform active:scale-95 inline-block"
+              >
+                Get Started
+              </Link>
+            </motion.div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+};
 
 const TrustBar = () => (
   <section className="py-16 bg-surface-container-low/30 border-y border-outline-variant/10">

@@ -1,4 +1,7 @@
+"use client";
+
 import type { ReactNode } from "react";
+import { useRef } from "react";
 import { MAIN_CONTENT_ID } from "@/lib/a11y";
 import {
   Activity,
@@ -8,6 +11,8 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { cn } from "../ui/utils";
+import { Canvas } from "@react-three/fiber";
+import { Particles } from "../marketing/medusae";
 
 type AuthCanvasProps = {
   children: ReactNode;
@@ -42,18 +47,36 @@ type AuthInfoBoxProps = {
 };
 
 export function AuthCanvas({ children, className, footer }: AuthCanvasProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
   return (
-    <div className="auth-canvas relative min-h-dvh bg-[var(--surface)]">
+    <div
+      ref={containerRef}
+      className="auth-canvas relative min-h-dvh bg-[var(--surface)]"
+    >
+      <div className="absolute inset-0 z-0 pointer-events-auto">
+        <Canvas
+          eventSource={containerRef as any}
+          camera={{ position: [0, 0, 5] }}
+          gl={{ alpha: true }}
+        >
+          <Particles />
+        </Canvas>
+      </div>
       <div className="pointer-events-none absolute inset-x-0 top-0 h-full bg-[radial-gradient(circle_at_top_center,rgba(0,120,199,0.22),transparent_60%)]" />
       <main
         id={MAIN_CONTENT_ID}
         tabIndex={-1}
-        className="relative z-10 flex min-h-dvh w-full flex-col px-4 py-10 sm:px-6 lg:px-8"
+        className="relative z-10 flex min-h-dvh w-full flex-col px-4 py-10 sm:px-6 lg:px-8 pointer-events-none"
       >
-        <div className={cn("flex w-full flex-1 flex-col justify-center", className)}>
+        <div
+          className={cn(
+            "flex w-full flex-1 flex-col justify-center pointer-events-auto z-10",
+            className,
+          )}
+        >
           {children}
         </div>
-        {footer}
+        <div className="mt-auto w-full pointer-events-auto z-10">{footer}</div>
       </main>
     </div>
   );
@@ -93,7 +116,7 @@ export function AuthPanel({ children, className, ...props }: AuthPanelProps) {
 export function AuthInfoBox({ children, className }: AuthInfoBoxProps) {
   return (
     <div className={cn("mt-6 flex justify-center", className)}>
-      <div className="max-w-md rounded-2xl bg-[var(--surface-container-low)] px-4 py-3 text-center text-sm text-[var(--on-surface-variant)]">
+      <div className="max-w-md rounded-2xl bg-(--surface-container-low) px-4 py-3 text-center text-sm text-[var(--on-surface-variant)]">
         {children}
       </div>
     </div>

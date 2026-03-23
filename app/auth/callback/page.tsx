@@ -14,7 +14,6 @@ import {
   CardTitle,
 } from "@/app/components/ui/card";
 import { MAIN_CONTENT_ID } from "@/lib/a11y";
-import { isGoogleAuthEnabled } from "@/lib/auth-features";
 import { safeRedirectPath } from "@/lib/redirect-path";
 import { supabase } from "@/lib/supabase";
 
@@ -73,43 +72,6 @@ function GoogleCallbackContent() {
 
     return `/register?${new URLSearchParams({ next: redirectPath }).toString()}`;
   }, [redirectPath]);
-
-  useEffect(() => {
-    if (!isGoogleAuthEnabled) {
-      void supabase.auth.signOut();
-    }
-  }, []);
-
-  if (!isGoogleAuthEnabled) {
-    return (
-      <main
-        id={MAIN_CONTENT_ID}
-        tabIndex={-1}
-        className="min-h-screen bg-muted/50 flex items-center justify-center p-4"
-      >
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <TriangleAlert className="h-5 w-5 text-amber-500" />
-              Google sign-in disabled
-            </CardTitle>
-            <CardDescription>
-              Google login and registration are currently turned off. Use email,
-              magic link, or passkey instead.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex gap-2 justify-end">
-            <Button variant="outline" onClick={() => router.replace(loginPath)}>
-              Back to Login
-            </Button>
-            <Button onClick={() => router.replace(registerPath)}>
-              Create Account
-            </Button>
-          </CardContent>
-        </Card>
-      </main>
-    );
-  }
 
   useEffect(() => {
     let isMounted = true;

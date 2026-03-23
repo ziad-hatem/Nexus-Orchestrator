@@ -1,0 +1,65 @@
+{
+    "name": "@vibe-rational/medusae",
+    "version": "0.1.9",
+    "description": "An organic, breathing medusa particle effect built with React Three Fiber. Inspired by Antigravity landing page.",
+    "keywords": [
+        "react",
+        "three",
+        "react-three-fiber",
+        "r3f",
+        "particles",
+        "shader",
+        "medusa"
+    ],
+    "homepage": "https://github.com/ewohlken2/BreathDearMedusae#readme",
+    "bugs": {
+        "url": "https://github.com/ewohlken2/BreathDearMedusae/issues"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/ewohlken2/BreathDearMedusae.git",
+        "directory": "packages/medusae"
+    },
+    "license": "UNLICENSED",
+    "author": "ewohlken2",
+    "type": "module",
+    "exports": {
+        ".": {
+            "types": "./src/index.d.ts",
+            "import": "./dist/index.js",
+            "require": "./dist/index.cjs"
+        },
+        "./style.css": "./dist/index.css"
+    },
+    "main": "dist/index.cjs",
+    "types": "src/index.d.ts",
+    "files": [
+        "dist",
+        "src/index.d.ts",
+        "src/medusae.css"
+    ],
+    "scripts": {
+        "build": "vite build",
+        "prepublishOnly": "pnpm build"
+    },
+    "dependencies": {
+        "react": "^19.2.4",
+        "react-dom": "^19.2.4",
+        "three": "^0.180.0"
+    },
+    "devDependencies": {
+        "@vitejs/plugin-react": "^5.1.1",
+        "vite": "^7.2.4"
+    },
+    "peerDependencies": {
+        "react": "^18 || ^19",
+        "react-dom": "^18 || ^19",
+        "three": "^0.180.0",
+        "@react-three/fiber": "^9"
+    },
+    "publishConfig": {
+        "access": "public"
+    },
+    "module": "dist/index.js",
+    "style": "dist/index.css"
+}
