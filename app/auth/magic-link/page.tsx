@@ -170,17 +170,23 @@ function MagicLinkCallbackContent() {
         let refreshToken: string | null = null;
 
         if (code) {
-          const { data, error } = await supabase.auth.exchangeCodeForSession(
-            code,
-          );
-          if (error || !data.session?.access_token || !data.session.refresh_token) {
-            throw new Error(error?.message ?? "Magic link code exchange failed");
+          const { data, error } =
+            await supabase.auth.exchangeCodeForSession(code);
+          if (
+            error ||
+            !data.session?.access_token ||
+            !data.session.refresh_token
+          ) {
+            throw new Error(
+              error?.message ?? "Magic link code exchange failed",
+            );
           }
           accessToken = data.session.access_token;
           refreshToken = data.session.refresh_token;
         } else {
           const hash =
-            typeof window !== "undefined" && window.location.hash.startsWith("#")
+            typeof window !== "undefined" &&
+            window.location.hash.startsWith("#")
               ? window.location.hash.slice(1)
               : "";
           const hashParams = new URLSearchParams(hash);
@@ -192,8 +198,14 @@ function MagicLinkCallbackContent() {
               access_token: accessFromHash,
               refresh_token: refreshFromHash,
             });
-            if (error || !data.session?.access_token || !data.session.refresh_token) {
-              throw new Error(error?.message ?? "Failed to initialize auth session");
+            if (
+              error ||
+              !data.session?.access_token ||
+              !data.session.refresh_token
+            ) {
+              throw new Error(
+                error?.message ?? "Failed to initialize auth session",
+              );
             }
             accessToken = data.session.access_token;
             refreshToken = data.session.refresh_token;
@@ -225,7 +237,8 @@ function MagicLinkCallbackContent() {
               isLoading: false,
               error: null,
               requiresMfa: true,
-              info: mfaResponse.message ?? "Verification code sent to your email.",
+              info:
+                mfaResponse.message ?? "Verification code sent to your email.",
               email: mfaResponse.email ?? null,
             });
             return;
@@ -245,7 +258,10 @@ function MagicLinkCallbackContent() {
         }
         setState({
           isLoading: false,
-          error: getErrorMessage(error, "Could not complete magic link sign-in"),
+          error: getErrorMessage(
+            error,
+            "Could not complete magic link sign-in",
+          ),
           requiresMfa: false,
           info: null,
           email: null,
@@ -355,14 +371,13 @@ function MagicLinkCallbackContent() {
 
   if (state.isLoading) {
     return (
-      <AuthCanvas>
-        <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-md flex-col">
+      <AuthCanvas footer={<AuthFooterMeta />}>
+        <div className="mx-auto flex w-full max-w-md flex-col">
           <AsyncStatePanel
             title="Signing you in"
             description="Validating your magic link and completing sign-in..."
             icon={<Loader2 className="h-6 w-6 animate-spin" />}
           />
-          <AuthFooterMeta className="pt-8" />
         </div>
       </AuthCanvas>
     );
@@ -370,8 +385,8 @@ function MagicLinkCallbackContent() {
 
   if (state.requiresMfa) {
     return (
-      <AuthCanvas>
-        <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-md flex-col">
+      <AuthCanvas footer={<AuthFooterMeta />}>
+        <div className="mx-auto flex w-full max-w-md flex-col">
           <MfaPanel
             description={`We've sent a 6-digit verification code to ${state.email ?? "your registered email"}. Enter the code below to continue.`}
             code={mfaCode}
@@ -388,7 +403,6 @@ function MagicLinkCallbackContent() {
             isResending={isResendingMfa}
             alternativeLabel="Back to login"
           />
-          <AuthFooterMeta className="pt-8" />
         </div>
       </AuthCanvas>
     );
@@ -396,8 +410,8 @@ function MagicLinkCallbackContent() {
 
   if (!state.error) {
     return (
-      <AuthCanvas>
-        <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-3xl flex-col">
+      <AuthCanvas footer={<AuthFooterMeta />}>
+        <div className="mx-auto flex w-full max-w-3xl flex-col">
           <AuthBrand className="mb-10" />
           <MagicLinkPanel
             className="mx-auto max-w-2xl"
@@ -408,15 +422,14 @@ function MagicLinkCallbackContent() {
             secondaryActionLabel="Back to Login"
           />
           <VerificationHelpText />
-          <AuthFooterMeta className="pt-8" />
         </div>
       </AuthCanvas>
     );
   }
 
   return (
-    <AuthCanvas>
-      <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-md flex-col">
+    <AuthCanvas footer={<AuthFooterMeta />}>
+      <div className="mx-auto flex w-full max-w-md flex-col">
         <AsyncStatePanel
           title="Magic link failed"
           description={state.error}
@@ -435,7 +448,6 @@ function MagicLinkCallbackContent() {
           <Info className="h-4 w-4" />
           Re-request a fresh sign-in link if this one expired.
         </div>
-        <AuthFooterMeta className="pt-8" />
       </div>
     </AuthCanvas>
   );
@@ -443,7 +455,7 @@ function MagicLinkCallbackContent() {
 
 function MagicLinkCallbackFallback() {
   return (
-    <AuthCanvas>
+    <AuthCanvas footer={<AuthFooterMeta />}>
       <div className="mx-auto max-w-md">
         <AsyncStatePanel
           title="Loading magic link"
