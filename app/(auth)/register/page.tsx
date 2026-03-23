@@ -62,6 +62,9 @@ function RegisterPageContent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const redirectPath = safeRedirectPath(searchParams.get("next")) ?? "/";
+  const isInvite = redirectPath.startsWith("/invite/");
+  const activeSteps = isInvite ? registerSteps.slice(1) : registerSteps;
+
   const loginUrl = new URLSearchParams(
     redirectPath === "/" ? {} : { next: redirectPath },
   );
@@ -72,18 +75,20 @@ function RegisterPageContent() {
 
   const loginQuery = loginUrl.toString();
   const loginPath = `/login${loginQuery ? `?${loginQuery}` : ""}`;
-  const currentStep = registerSteps[stepIndex];
-  const isLastStep = stepIndex === registerSteps.length - 1;
+  const currentStep = activeSteps[stepIndex];
+  const isLastStep = stepIndex === activeSteps.length - 1;
 
   const getStepError = (index: number): string | null => {
-    if (index === 0) {
+    const currentStepKey = activeSteps[index].key;
+
+    if (currentStepKey === "workspace") {
       if (!company.trim()) {
         return "Enter your organization name to continue.";
       }
       return null;
     }
 
-    if (index === 1) {
+    if (currentStepKey === "profile") {
       if (!firstName.trim() || !lastName.trim()) {
         return "Enter your full name to continue.";
       }
@@ -109,7 +114,7 @@ function RegisterPageContent() {
     }
 
     setError("");
-    setStepIndex((current) => Math.min(current + 1, registerSteps.length - 1));
+    setStepIndex((current) => Math.min(current + 1, activeSteps.length - 1));
   };
 
   const handlePreviousStep = () => {
@@ -173,13 +178,16 @@ function RegisterPageContent() {
         <AuthPanel>
           <div className="mb-8">
             <div className="mb-6 flex items-center justify-between gap-4">
-              {registerSteps.map((step, index) => {
+              {activeSteps.map((step, index) => {
                 const StepIcon = step.icon;
                 const isActive = index === stepIndex;
                 const isComplete = index < stepIndex;
-                const lastIcon = registerSteps.length - 1;
+                const lastIcon = activeSteps.length - 1;
                 return (
-                  <div key={step.key} className={`flex min-w-0 ${index === lastIcon ? '' : 'flex-1'} items-center gap-3`}>
+                  <div
+                    key={step.key}
+                    className={`flex min-w-0 ${index === lastIcon ? "" : "flex-1"} items-center gap-3`}
+                  >
                     <div
                       className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border text-sm transition-colors ${
                         isActive
@@ -191,7 +199,7 @@ function RegisterPageContent() {
                     >
                       <StepIcon className="h-4 w-4" />
                     </div>
-                    {index < registerSteps.length - 1 ? (
+                    {index < activeSteps.length - 1 ? (
                       <div
                         className={`h-px flex-1 ${index < stepIndex ? "bg-primary/50" : "bg-[var(--outline-variant)]"}`}
                       />
@@ -219,10 +227,13 @@ function RegisterPageContent() {
           ) : null}
 
           <form className="space-y-5" onSubmit={handleSubmit}>
-            {stepIndex === 0 ? (
+            {activeSteps[stepIndex].key === "workspace" ? (
               <>
                 <div>
-                  <label className="label-caps mb-2 ml-1 block" htmlFor="company">
+                  <label
+                    className="label-caps mb-2 ml-1 block"
+                    htmlFor="company"
+                  >
                     Organization Name
                   </label>
                   <Input
@@ -242,7 +253,7 @@ function RegisterPageContent() {
               </>
             ) : null}
 
-            {stepIndex === 1 ? (
+            {activeSteps[stepIndex].key === "profile" ? (
               <div className="grid gap-5 sm:grid-cols-2">
                 <div>
                   <label
@@ -281,7 +292,7 @@ function RegisterPageContent() {
               </div>
             ) : null}
 
-            {stepIndex === 2 ? (
+            {activeSteps[stepIndex].key === "security" ? (
               <>
                 <div>
                   <label className="label-caps mb-2 ml-1 block" htmlFor="email">
@@ -300,7 +311,10 @@ function RegisterPageContent() {
                 </div>
 
                 <div>
-                  <label className="label-caps mb-2 ml-1 block" htmlFor="password">
+                  <label
+                    className="label-caps mb-2 ml-1 block"
+                    htmlFor="password"
+                  >
                     Password
                   </label>
                   <Input
@@ -376,6 +390,8 @@ function RegisterPageContent() {
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Creating account...
                     </>
+                  ) : isInvite ? (
+                    "Create Account"
                   ) : (
                     "Create Enterprise Account"
                   )}
@@ -383,7 +399,6 @@ function RegisterPageContent() {
               )}
             </div>
           </form>
-
         </AuthPanel>
 
         <div className="mt-6 text-center text-sm text-[var(--on-surface-variant)]">
