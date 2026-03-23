@@ -9,6 +9,7 @@ import {
   AuthBrand,
   AuthCanvas,
   AuthFooterMeta,
+  AuthInfoBox,
   AuthPanel,
 } from "@/app/components/auth/auth-shell";
 import { Button } from "../../components/ui/button";
@@ -91,8 +92,8 @@ export default function Page() {
   };
 
   return (
-    <AuthCanvas>
-      <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-md flex-col">
+    <AuthCanvas footer={<AuthFooterMeta className="pt-8" />}>
+      <div className="mx-auto flex w-full max-w-md flex-col">
         <AuthBrand className="mb-10" />
         <AuthPanel>
           <div className="mb-8">
@@ -105,10 +106,12 @@ export default function Page() {
           </div>
 
           {checkingLink ? (
-            <div className="flex items-center justify-center gap-2 rounded-2xl bg-[var(--surface-container-low)] px-4 py-5 text-sm text-[var(--on-surface-variant)]">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Verifying reset link...
-            </div>
+            <AuthInfoBox>
+              <span className="inline-flex items-center justify-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Verifying reset link...
+              </span>
+            </AuthInfoBox>
           ) : !isLinkValid ? (
             <div className="space-y-4">
               <div className="rounded-2xl bg-[var(--error-container)] px-4 py-3 text-sm font-medium text-[var(--error)]">
@@ -136,7 +139,10 @@ export default function Page() {
               ) : null}
 
               <div>
-                <label className="label-caps mb-2 ml-1 block" htmlFor="password">
+                <label
+                  className="label-caps mb-2 ml-1 block"
+                  htmlFor="password"
+                >
                   New Password
                 </label>
                 <Input
@@ -194,7 +200,6 @@ export default function Page() {
           <ShieldCheck className="h-3.5 w-3.5" />
           <span>Secure recovery session</span>
         </div>
-        <AuthFooterMeta className="pt-8" />
       </div>
     </AuthCanvas>
   );

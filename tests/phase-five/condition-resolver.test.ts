@@ -8,7 +8,7 @@ import type { WorkflowSourceContext } from "@/lib/server/workflows/types";
 
 const sourceContext: WorkflowSourceContext = {
   sourceLabel: "internal_event",
-  eventKey: "ticket.created",
+  eventKey: "organization.created",
   requestPath: "/hooks/support/ticket-created",
   requestMethod: "POST",
   requestIp: "198.51.100.20",
@@ -77,7 +77,7 @@ test("resolveConditionField resolves nested payload and context paths and preser
   });
   assert.deepEqual(contextResult, {
     found: true,
-    value: "ticket.created",
+    value: "organization.created",
     scope: "context",
     path: "eventKey",
   });

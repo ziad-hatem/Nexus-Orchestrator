@@ -23,7 +23,7 @@ function createCondition(
 
 const context = {
   sourceLabel: "internal_event",
-  eventKey: "payment.failed" as const,
+  eventKey: "organization.created" as const,
   actorUserId: "user_1",
 };
 

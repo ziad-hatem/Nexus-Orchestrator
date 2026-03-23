@@ -19,13 +19,13 @@ import { WorkspaceFooter } from "@/app/components/workspace/workspace-footer";
 import { WorkspaceUserCard } from "@/app/components/workspace/workspace-user-card";
 import { MAIN_CONTENT_ID } from "@/lib/a11y";
 import type { UserOrganizationMembership } from "@/lib/server/org-service";
-import { ROLE_LABELS } from "@/lib/server/permissions";
+import type { OrganizationRole } from "@/lib/server/permissions";
 
 type WorkspaceShellProps = {
   children: ReactNode;
   organizationName: string;
   organizationSlug: string;
-  role: keyof typeof ROLE_LABELS;
+  role: OrganizationRole;
   memberships: UserOrganizationMembership[];
   canManageMembers: boolean;
   canViewAuditLogs: boolean;
@@ -161,12 +161,6 @@ export function WorkspaceShell({
             >
               <p className="text-xs font-bold uppercase tracking-[0.18em] text-primary">
                 Nexus Orchestrator
-              </p>
-              <h1 className="mt-3 text-2xl font-bold tracking-[-0.03em] text-[var(--on-surface)]">
-                {organizationName}
-              </h1>
-              <p className="mt-2 text-sm text-[var(--on-surface-variant)]">
-                Signed in as {ROLE_LABELS[role]}
               </p>
             </div>
           </div>

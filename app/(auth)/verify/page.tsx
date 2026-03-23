@@ -4,10 +4,7 @@ import { Suspense, useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import {
-  AuthCanvas,
-  AuthFooterMeta,
-} from "@/app/components/auth/auth-shell";
+import { AuthCanvas, AuthFooterMeta } from "@/app/components/auth/auth-shell";
 import { MfaPanel } from "@/app/components/auth/auth-verification-panels";
 import { isVerificationCodeValid } from "./verify-flow";
 
@@ -34,11 +31,15 @@ function VerifyPageContent() {
   };
 
   return (
-    <AuthCanvas>
-      <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-md flex-col">
+    <AuthCanvas
+      footer={
+        verified ? <AuthFooterMeta /> : <AuthFooterMeta className="pt-8" />
+      }
+    >
+      <div className="mx-auto flex w-full max-w-md flex-col">
         {verified ? (
-          <div className="space-y-8">
-            <div className="auth-panel rounded-[1.5rem] px-8 py-10 text-center shadow-[0_12px_32px_rgba(11,28,48,0.06)]">
+          <>
+            <div className="auth-panel rounded-[1.5rem] px-8 py-10 text-center shadow-[0_12px_32px_rgba(11,28,48,0.06)] mb-8">
               <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--surface-container-low)] text-primary">
                 <CheckCircle2 className="h-7 w-7" />
               </div>
@@ -56,8 +57,7 @@ function VerifyPageContent() {
                 Continue to Login
               </button>
             </div>
-            <AuthFooterMeta />
-          </div>
+          </>
         ) : (
           <>
             <MfaPanel
@@ -79,7 +79,6 @@ function VerifyPageContent() {
                 Go to login
               </button>
             </div>
-            <AuthFooterMeta className="pt-8" />
           </>
         )}
       </div>

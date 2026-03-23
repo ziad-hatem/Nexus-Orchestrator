@@ -1,7 +1,15 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import { AlertCircle, Loader2 } from "lucide-react";
+import {
+  AlertCircle,
+  ArrowLeft,
+  ArrowRight,
+  Building2,
+  Loader2,
+  ShieldCheck,
+  UserRound,
+} from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -9,6 +17,7 @@ import {
   AuthCanvas,
   AuthDividerLabel,
   AuthFooterMeta,
+  AuthInfoBox,
   AuthPanel,
 } from "@/app/components/auth/auth-shell";
 import { Button } from "../../components/ui/button";
@@ -16,6 +25,31 @@ import { Input } from "../../components/ui/input";
 import { getPasswordMismatchError } from "./register-flow";
 import { safeRedirectPath } from "@/lib/redirect-path";
 import { supabase } from "@/lib/supabase";
+
+const registerSteps = [
+  {
+    key: "workspace",
+    title: "Workspace setup",
+    subtitle: "Name the organization your team will collaborate in.",
+    icon: Building2,
+  },
+  {
+    key: "profile",
+    title: "Your profile",
+    subtitle: "Tell us who is setting up the first admin account.",
+    icon: UserRound,
+  },
+  {
+    key: "security",
+    title: "Secure access",
+    subtitle: "Create the credentials you will use to sign in.",
+    icon: ShieldCheck,
+  },
+] as const;
+
+function isEmailValid(value: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
 
 function GoogleMark() {
   return (
@@ -43,6 +77,7 @@ function GoogleMark() {
 function RegisterPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [stepIndex, setStepIndex] = useState(0);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [company, setCompany] = useState("");
@@ -62,6 +97,50 @@ function RegisterPageContent() {
 
   const loginQuery = loginUrl.toString();
   const loginPath = `/login${loginQuery ? `?${loginQuery}` : ""}`;
+  const currentStep = registerSteps[stepIndex];
+  const isLastStep = stepIndex === registerSteps.length - 1;
+
+  const getStepError = (index: number): string | null => {
+    if (index === 0) {
+      if (!company.trim()) {
+        return "Enter your organization name to continue.";
+      }
+      return null;
+    }
+
+    if (index === 1) {
+      if (!firstName.trim() || !lastName.trim()) {
+        return "Enter your full name to continue.";
+      }
+      return null;
+    }
+
+    if (!isEmailValid(email)) {
+      return "Enter a valid work email to continue.";
+    }
+
+    if (password.trim().length < 6) {
+      return "Password must be at least 6 characters.";
+    }
+
+    return getPasswordMismatchError(password, confirmPassword);
+  };
+
+  const handleNextStep = () => {
+    const stepError = getStepError(stepIndex);
+    if (stepError) {
+      setError(stepError);
+      return;
+    }
+
+    setError("");
+    setStepIndex((current) => Math.min(current + 1, registerSteps.length - 1));
+  };
+
+  const handlePreviousStep = () => {
+    setError("");
+    setStepIndex((current) => Math.max(current - 1, 0));
+  };
 
   const handleGoogleSignIn = async () => {
     setError("");
@@ -98,9 +177,9 @@ function RegisterPageContent() {
     event.preventDefault();
     setError("");
 
-    const mismatchError = getPasswordMismatchError(password, confirmPassword);
-    if (mismatchError) {
-      setError(mismatchError);
+    const stepError = getStepError(stepIndex);
+    if (stepError) {
+      setError(stepError);
       return;
     }
 
@@ -141,19 +220,48 @@ function RegisterPageContent() {
   };
 
   return (
-    <AuthCanvas>
-      <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-[32rem] flex-col">
+    <AuthCanvas footer={<AuthFooterMeta className="pt-8" />}>
+      <div className="mx-auto flex w-full max-w-[32rem] flex-col">
         <AuthBrand
           className="mb-10"
           subtitle="Design your operational future."
         />
         <AuthPanel>
           <div className="mb-8">
+            <div className="mb-6 flex items-center justify-between gap-4">
+              {registerSteps.map((step, index) => {
+                const StepIcon = step.icon;
+                const isActive = index === stepIndex;
+                const isComplete = index < stepIndex;
+                const lastIcon = registerSteps.length - 1;
+                return (
+                  <div key={step.key} className={`flex min-w-0 ${index === lastIcon ? '' : 'flex-1'} items-center gap-3`}>
+                    <div
+                      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border text-sm transition-colors ${
+                        isActive
+                          ? "border-primary bg-primary text-[var(--on-primary)] shadow-[0_12px_30px_rgba(0,95,158,0.18)]"
+                          : isComplete
+                            ? "border-emerald-500/25 bg-emerald-500/12 text-emerald-700 dark:text-emerald-200"
+                            : "border-[var(--outline-variant)] bg-[var(--surface-container-low)] text-[var(--on-surface-variant)]"
+                      }`}
+                    >
+                      <StepIcon className="h-4 w-4" />
+                    </div>
+                    {index < registerSteps.length - 1 ? (
+                      <div
+                        className={`h-px flex-1 ${index < stepIndex ? "bg-primary/50" : "bg-[var(--outline-variant)]"}`}
+                      />
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+
             <h2 className="text-2xl font-semibold tracking-[-0.02em] text-[var(--on-surface)]">
-              Create your workspace
+              {currentStep.title}
             </h2>
             <p className="mt-2 text-sm text-[var(--on-surface-variant)]">
-              Start your 14-day premium trial.
+              {currentStep.subtitle}
             </p>
           </div>
 
@@ -167,115 +275,169 @@ function RegisterPageContent() {
           ) : null}
 
           <form className="space-y-5" onSubmit={handleSubmit}>
-            <div>
-              <label className="label-caps mb-2 ml-1 block" htmlFor="company">
-                Organization Name
-              </label>
-              <Input
-                id="company"
-                placeholder="Acme Corp"
-                value={company}
-                onChange={(event) => setCompany(event.target.value)}
-                disabled={loading}
-                className="input-field border-0 px-4 py-3 shadow-none"
-              />
-            </div>
+            {stepIndex === 0 ? (
+              <>
+                <div>
+                  <label className="label-caps mb-2 ml-1 block" htmlFor="company">
+                    Organization Name
+                  </label>
+                  <Input
+                    id="company"
+                    placeholder="Acme Corp"
+                    value={company}
+                    onChange={(event) => setCompany(event.target.value)}
+                    disabled={loading}
+                    className="input-field border-0 px-4 py-3 shadow-none"
+                    required
+                  />
+                </div>
+                <AuthInfoBox className="mt-1">
+                  This becomes your team workspace and the home for your first
+                  workflows, runs, and audit history.
+                </AuthInfoBox>
+              </>
+            ) : null}
 
-            <div className="grid gap-5 sm:grid-cols-2">
-              <div>
-                <label className="label-caps mb-2 ml-1 block" htmlFor="firstName">
-                  Full Name
-                </label>
-                <Input
-                  id="firstName"
-                  placeholder="John"
-                  value={firstName}
-                  onChange={(event) => setFirstName(event.target.value)}
-                  disabled={loading}
-                  className="input-field border-0 px-4 py-3 shadow-none"
-                  required
-                />
+            {stepIndex === 1 ? (
+              <div className="grid gap-5 sm:grid-cols-2">
+                <div>
+                  <label
+                    className="label-caps mb-2 ml-1 block"
+                    htmlFor="firstName"
+                  >
+                    First Name
+                  </label>
+                  <Input
+                    id="firstName"
+                    placeholder="John"
+                    value={firstName}
+                    onChange={(event) => setFirstName(event.target.value)}
+                    disabled={loading}
+                    className="input-field border-0 px-4 py-3 shadow-none"
+                    required
+                  />
+                </div>
+                <div>
+                  <label
+                    className="label-caps mb-2 ml-1 block"
+                    htmlFor="lastName"
+                  >
+                    Last Name
+                  </label>
+                  <Input
+                    id="lastName"
+                    placeholder="Doe"
+                    value={lastName}
+                    onChange={(event) => setLastName(event.target.value)}
+                    disabled={loading}
+                    className="input-field border-0 px-4 py-3 shadow-none"
+                    required
+                  />
+                </div>
               </div>
-              <div className="sm:pt-[1.65rem]">
-                <Input
-                  id="lastName"
-                  placeholder="Doe"
-                  value={lastName}
-                  onChange={(event) => setLastName(event.target.value)}
-                  disabled={loading}
-                  className="input-field border-0 px-4 py-3 shadow-none"
-                  required
-                />
-              </div>
-            </div>
+            ) : null}
 
-            <div>
-              <label className="label-caps mb-2 ml-1 block" htmlFor="email">
-                Work Email
-              </label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="name@company.com"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                disabled={loading}
-                className="input-field border-0 px-4 py-3 shadow-none"
-                required
-              />
-            </div>
+            {stepIndex === 2 ? (
+              <>
+                <div>
+                  <label className="label-caps mb-2 ml-1 block" htmlFor="email">
+                    Work Email
+                  </label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="name@company.com"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    disabled={loading}
+                    className="input-field border-0 px-4 py-3 shadow-none"
+                    required
+                  />
+                </div>
 
-            <div>
-              <label className="label-caps mb-2 ml-1 block" htmlFor="password">
-                Password
-              </label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="At least 6 characters"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                disabled={loading}
-                className="input-field border-0 px-4 py-3 shadow-none"
-                minLength={6}
-                required
-              />
-            </div>
+                <div>
+                  <label className="label-caps mb-2 ml-1 block" htmlFor="password">
+                    Password
+                  </label>
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="At least 6 characters"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    disabled={loading}
+                    className="input-field border-0 px-4 py-3 shadow-none"
+                    minLength={6}
+                    required
+                  />
+                </div>
 
-            <div>
-              <label
-                className="label-caps mb-2 ml-1 block"
-                htmlFor="confirmPassword"
+                <div>
+                  <label
+                    className="label-caps mb-2 ml-1 block"
+                    htmlFor="confirmPassword"
+                  >
+                    Confirm Password
+                  </label>
+                  <Input
+                    id="confirmPassword"
+                    type="password"
+                    placeholder="Confirm your password"
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    disabled={loading}
+                    className="input-field border-0 px-4 py-3 shadow-none"
+                    minLength={6}
+                    required
+                  />
+                </div>
+
+                <AuthInfoBox className="mt-1">
+                  We will send a verification email to activate your workspace
+                  securely after account creation.
+                </AuthInfoBox>
+              </>
+            ) : null}
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-[3.25rem] rounded-xl border-0 bg-[var(--surface-container-high)] text-sm font-medium text-[var(--on-surface)] hover:bg-[var(--surface-container)] sm:min-w-[10rem]"
+                onClick={handlePreviousStep}
+                disabled={loading || stepIndex === 0}
               >
-                Confirm Password
-              </label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                placeholder="Confirm your password"
-                value={confirmPassword}
-                onChange={(event) => setConfirmPassword(event.target.value)}
-                disabled={loading}
-                className="input-field border-0 px-4 py-3 shadow-none"
-                minLength={6}
-                required
-              />
-            </div>
+                <ArrowLeft className="h-4 w-4" />
+                Back
+              </Button>
 
-            <Button
-              type="submit"
-              className="premium-gradient min-h-[3.25rem] w-full rounded-xl text-sm font-semibold text-[var(--on-primary)] shadow-[0_12px_28px_rgba(0,95,158,0.18)] hover:opacity-95"
-              disabled={loading}
-            >
-              {loading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Creating account...
-                </>
+              {!isLastStep ? (
+                <Button
+                  type="button"
+                  className="premium-gradient min-h-[3.25rem] rounded-xl px-6 text-sm font-semibold text-[var(--on-primary)] shadow-[0_12px_28px_rgba(0,95,158,0.18)] hover:opacity-95 sm:min-w-[11rem]"
+                  onClick={handleNextStep}
+                  disabled={loading}
+                >
+                  Continue
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
               ) : (
-                "Create Enterprise Account"
+                <Button
+                  type="submit"
+                  className="premium-gradient min-h-[3.25rem] rounded-xl px-6 text-sm font-semibold text-[var(--on-primary)] shadow-[0_12px_28px_rgba(0,95,158,0.18)] hover:opacity-95 sm:min-w-[13rem]"
+                  disabled={loading}
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Creating account...
+                    </>
+                  ) : (
+                    "Create Enterprise Account"
+                  )}
+                </Button>
               )}
-            </Button>
+            </div>
           </form>
 
           <div className="my-6">
@@ -305,8 +467,6 @@ function RegisterPageContent() {
             Login
           </button>
         </div>
-
-        <AuthFooterMeta className="pt-8" />
       </div>
     </AuthCanvas>
   );
@@ -314,8 +474,8 @@ function RegisterPageContent() {
 
 function RegisterPageFallback() {
   return (
-    <AuthCanvas>
-      <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-[32rem] flex-col">
+    <AuthCanvas footer={<AuthFooterMeta className="pt-8" />}>
+      <div className="mx-auto flex w-full max-w-[32rem] flex-col">
         <AuthBrand
           className="mb-10"
           subtitle="Design your operational future."
@@ -331,7 +491,6 @@ function RegisterPageFallback() {
             Preparing your secure sign-up flow.
           </p>
         </AuthPanel>
-        <AuthFooterMeta className="pt-8" />
       </div>
     </AuthCanvas>
   );

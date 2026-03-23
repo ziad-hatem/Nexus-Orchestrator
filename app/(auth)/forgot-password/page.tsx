@@ -56,8 +56,8 @@ export default function Page() {
   };
 
   return (
-    <AuthCanvas>
-      <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-md flex-col">
+    <AuthCanvas footer={<AuthFooterMeta className="pt-8" />}>
+      <div className="mx-auto flex w-full max-w-md flex-col">
         <AuthPanel className="px-8 py-8 sm:px-10">
           {submitted ? (
             <div className="flex flex-col text-center">
@@ -164,8 +164,6 @@ export default function Page() {
             <span>Enterprise Node</span>
           </div>
         </div>
-
-        <AuthFooterMeta className="pt-8" />
       </div>
     </AuthCanvas>
   );

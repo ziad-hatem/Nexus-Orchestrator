@@ -5,6 +5,7 @@ type FormStatusMessageProps = {
   message?: string | null;
   tone?: "error" | "success" | "info";
   className?: string;
+  centered?: boolean;
 };
 
 export function FormStatusMessage({
@@ -12,6 +13,7 @@ export function FormStatusMessage({
   message,
   tone = "info",
   className = "",
+  centered = false,
 }: FormStatusMessageProps) {
   if (!message) {
     return null;
@@ -41,9 +43,9 @@ export function FormStatusMessage({
       id={id}
       role={config.role}
       aria-live={tone === "error" ? "assertive" : "polite"}
-      className={`rounded-2xl px-4 py-3 text-sm font-medium ${config.classes} ${className}`}
+      className={`rounded-2xl px-4 py-3 text-sm font-medium ${centered ? "mx-auto text-center" : ""} ${config.classes} ${className}`}
     >
-      <div className="flex items-start gap-3">
+      <div className={`flex gap-3 ${centered ? "items-center justify-center text-center" : "items-start"}`}>
         {config.icon}
         <span>{message}</span>
       </div>

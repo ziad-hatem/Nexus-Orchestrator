@@ -12,6 +12,7 @@ import { cn } from "../ui/utils";
 type AuthCanvasProps = {
   children: ReactNode;
   className?: string;
+  footer?: ReactNode;
 };
 
 type AuthBrandProps = {
@@ -35,16 +36,24 @@ type AuthTrustBadgesProps = {
   className?: string;
 };
 
-export function AuthCanvas({ children, className }: AuthCanvasProps) {
+type AuthInfoBoxProps = {
+  children: ReactNode;
+  className?: string;
+};
+
+export function AuthCanvas({ children, className, footer }: AuthCanvasProps) {
   return (
-    <div className="auth-canvas relative min-h-screen bg-[var(--surface)]">
+    <div className="auth-canvas relative min-h-dvh bg-[var(--surface)]">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-full bg-[radial-gradient(circle_at_top_center,rgba(0,120,199,0.22),transparent_60%)]" />
       <main
         id={MAIN_CONTENT_ID}
         tabIndex={-1}
-        className="relative z-10 flex min-h-screen w-full items-stretch justify-stretch px-4 py-10 sm:px-6 lg:px-8"
+        className="relative z-10 flex min-h-dvh w-full flex-col px-4 py-10 sm:px-6 lg:px-8"
       >
-        <div className={cn("w-full", className)}>{children}</div>
+        <div className={cn("flex w-full flex-1 flex-col justify-center", className)}>
+          {children}
+        </div>
+        {footer}
       </main>
     </div>
   );
@@ -77,6 +86,16 @@ export function AuthPanel({ children, className, ...props }: AuthPanelProps) {
       )}
     >
       {children}
+    </div>
+  );
+}
+
+export function AuthInfoBox({ children, className }: AuthInfoBoxProps) {
+  return (
+    <div className={cn("mt-6 flex justify-center", className)}>
+      <div className="max-w-md rounded-2xl bg-[var(--surface-container-low)] px-4 py-3 text-center text-sm text-[var(--on-surface-variant)]">
+        {children}
+      </div>
     </div>
   );
 }

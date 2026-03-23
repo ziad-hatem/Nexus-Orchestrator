@@ -320,6 +320,17 @@
   );
 }
 
+.text-gradient {
+  background: linear-gradient(
+    135deg,
+    var(--primary) 0%,
+    var(--primary-container) 100%
+  );
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
 .ambient-shadow {
   box-shadow: var(--glass-shadow-soft);
 }

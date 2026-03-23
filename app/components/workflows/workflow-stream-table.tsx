@@ -5,7 +5,10 @@ import {
   type FilterSelectConfig,
 } from "@/app/components/ui/filter-toolbar";
 import { Button } from "@/app/components/ui/button";
-import type { WorkflowIngestionEventSummary } from "@/lib/server/workflows/types";
+import type {
+  WorkflowIngestionEventSummary,
+  InternalEventKey,
+} from "@/lib/server/workflows/types";
 
 type WorkflowStreamTableProps = {
   orgSlug: string;
@@ -18,7 +21,7 @@ type WorkflowStreamTableProps = {
     source?: "manual" | "webhook" | "internal_event";
     status?: "accepted" | "rejected" | "duplicate" | "rate_limited";
     workflowId?: string;
-    eventKey?: "ticket.created" | "payment.failed";
+    eventKey?: InternalEventKey;
   };
 };
 
@@ -49,7 +52,8 @@ function buildPageHref(params: {
   if (params.workflowId) searchParams.set("workflowId", params.workflowId);
   if (params.eventKey) searchParams.set("eventKey", params.eventKey);
   if (params.page > 1) searchParams.set("page", String(params.page));
-  if (params.pageSize !== 20) searchParams.set("pageSize", String(params.pageSize));
+  if (params.pageSize !== 20)
+    searchParams.set("pageSize", String(params.pageSize));
 
   const query = searchParams.toString();
   return `/org/${params.orgSlug}/streams${query ? `?${query}` : ""}`;
@@ -99,12 +103,15 @@ export function WorkflowStreamTable({
       <section className="overflow-hidden rounded-[2rem] bg-[linear-gradient(135deg,rgba(11,28,48,0.98),rgba(0,95,158,0.88))] px-6 py-7 text-white shadow-[0_18px_48px_rgba(11,28,48,0.2)] sm:px-8">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
           <div className="max-w-3xl">
-            <p className="label-caps text-[rgba(255,255,255,0.72)]">Event streams</p>
+            <p className="label-caps text-[rgba(255,255,255,0.72)]">
+              Event streams
+            </p>
             <h1 className="mt-3 text-3xl font-bold tracking-[-0.03em] text-white">
               Track inbound trigger traffic across this organization
             </h1>
             <p className="mt-3 text-sm text-[rgba(255,255,255,0.82)]">
-              Review accepted, rejected, duplicate, and rate-limited deliveries for manual runs, webhooks, and internal system events.
+              Review accepted, rejected, duplicate, and rate-limited deliveries
+              for manual runs, webhooks, and internal system events.
             </p>
           </div>
           <div className="rounded-full bg-emerald-500/12 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-200">
@@ -118,7 +125,8 @@ export function WorkflowStreamTable({
           key={`streams-filters:${filters.query ?? ""}:${filters.source ?? ""}:${filters.status ?? ""}`}
           resetHref={`/org/${orgSlug}/streams`}
           search={{
-            label: "Search streams by workflow, match key, event key, or error message",
+            label:
+              "Search streams by workflow, match key, event key, or error message",
             placeholder: "Search streams",
             value: filters.query,
           }}

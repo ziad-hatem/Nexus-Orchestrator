@@ -20,6 +20,7 @@ import {
   AuthCanvas,
   AuthDividerLabel,
   AuthFooterMeta,
+  AuthInfoBox,
   AuthPanel,
   AuthTrustBadges,
 } from "@/app/components/auth/auth-shell";
@@ -31,6 +32,7 @@ import {
 } from "@/app/components/auth/auth-verification-panels";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
+import { cn } from "@/app/components/ui/utils";
 import { hasVerifiedQuery, mapLoginError } from "./login-flow";
 import { passkeyEndpoints } from "@/lib/passkey-endpoints";
 import { safeRedirectPath } from "@/lib/redirect-path";
@@ -243,7 +245,12 @@ function LoginPageContent() {
     [redirectPath],
   );
   const normalizedEmail = normalizeEmail(email);
+  const hasTypedEmail = normalizedEmail.length > 0;
   const hasValidEmail = isEmailFormat(normalizedEmail);
+  const hasResolvedPasskeyForEmail =
+    hasRegisteredPasskey && passkeyLookupEmail === normalizedEmail;
+  const showMagicLinkOption = hasValidEmail;
+  const showPasskeyOption = hasResolvedPasskeyForEmail && !isCheckingPasskey;
 
   const disableLoginActions =
     loading ||
@@ -643,18 +650,13 @@ function LoginPageContent() {
     }
   };
 
-  const passkeyDescription = !hasValidEmail
-    ? "Use biometrics or a security key once we confirm a registered passkey for this account."
-    : isCheckingPasskey || passkeyLookupEmail !== normalizedEmail
-      ? "Checking for a registered passkey on this workspace."
-      : hasRegisteredPasskey
-        ? "A passkey is registered for this email. Use biometrics or your security key to continue."
-        : "No passkey was found for this email yet. You can still continue with your magic link.";
+  const passkeyDescription =
+    "A passkey is registered for this email. Use biometrics or your security key to continue.";
 
   if (isVerified) {
     return (
-      <AuthCanvas>
-        <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-md flex-col">
+      <AuthCanvas footer={<AuthFooterMeta />}>
+        <div className="mx-auto flex w-full max-w-md flex-col">
           <AuthBrand className="mb-10" />
           <AuthPanel className="text-center">
             <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--surface-container-low)] text-primary">
@@ -677,7 +679,6 @@ function LoginPageContent() {
               Continue to Login
             </Button>
           </AuthPanel>
-          <AuthFooterMeta />
         </div>
       </AuthCanvas>
     );
@@ -685,8 +686,8 @@ function LoginPageContent() {
 
   if (requiresMfa) {
     return (
-      <AuthCanvas>
-        <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-md flex-col">
+      <AuthCanvas footer={<AuthFooterMeta className="pt-8" />}>
+        <div className="mx-auto flex w-full max-w-md flex-col">
           <MfaPanel
             description={`We've sent a 6-digit verification code to ${mfaTargetEmail ?? "your registered email"}. Enter the code below to continue.`}
             code={mfaCode}
@@ -702,7 +703,6 @@ function LoginPageContent() {
             isVerifying={isVerifyingMfaCode}
             isResending={isSendingMfaCode}
           />
-          <AuthFooterMeta className="pt-8" />
         </div>
       </AuthCanvas>
     );
@@ -710,15 +710,20 @@ function LoginPageContent() {
 
   if (magicLinkTargetEmail) {
     return (
-      <AuthCanvas>
-        <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-5xl flex-col">
+      <AuthCanvas footer={<AuthFooterMeta className="pt-8" />}>
+        <div className="mx-auto flex w-full max-w-5xl flex-col">
           <AuthBrand className="mb-10" />
           {error ? (
             <div className="mx-auto mb-6 max-w-2xl rounded-2xl bg-[var(--error-container)] px-4 py-3 text-sm font-medium text-[var(--error)]">
               {error}
             </div>
           ) : null}
-          <div className="grid gap-6 lg:grid-cols-2">
+          <div
+            className={cn(
+              "grid gap-6",
+              showPasskeyOption ? "lg:grid-cols-2" : "",
+            )}
+          >
             <MagicLinkPanel
               description={
                 magicLinkInfo ||
@@ -733,25 +738,16 @@ function LoginPageContent() {
                 isSendingMagicLink ? "Sending..." : "Resend Link"
               }
             />
-            <PasskeyStatusPanel
-              description={passkeyDescription}
-              status={
-                isCheckingPasskey || passkeyLookupEmail !== normalizedEmail
-                  ? "Checking registered credentials..."
-                  : hasRegisteredPasskey
-                    ? "Ready to verify on your device."
-                    : "No passkey available yet."
-              }
-              primaryLabel="Try Biometric Login"
-              onPrimaryAction={handlePasskeySignIn}
-              disabled={
-                disableLoginActions ||
-                isCheckingPasskey ||
-                passkeyLookupEmail !== normalizedEmail ||
-                !hasRegisteredPasskey
-              }
-              isBusy={isSigningInWithPasskey}
-            />
+            {showPasskeyOption ? (
+              <PasskeyStatusPanel
+                description={passkeyDescription}
+                status="Ready to verify on your device."
+                primaryLabel="Try Biometric Login"
+                onPrimaryAction={handlePasskeySignIn}
+                disabled={disableLoginActions || !showPasskeyOption}
+                isBusy={isSigningInWithPasskey}
+              />
+            ) : null}
           </div>
           <div className="mt-6 text-center">
             <Button
@@ -768,15 +764,14 @@ function LoginPageContent() {
             </Button>
           </div>
           <VerificationHelpText />
-          <AuthFooterMeta className="pt-8" />
         </div>
       </AuthCanvas>
     );
   }
 
   return (
-    <AuthCanvas>
-      <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-[32rem] flex-col">
+    <AuthCanvas footer={<AuthFooterMeta />}>
+      <div className="mx-auto flex w-full max-w-[32rem] flex-col">
         <AuthBrand className="mb-10" />
         <AuthPanel>
           <div className="mb-8">
@@ -840,10 +835,7 @@ function LoginPageContent() {
 
             <div>
               <div className="mb-2 flex items-center justify-between gap-3">
-                <label
-                  className="label-caps ml-1 block"
-                  htmlFor="password"
-                >
+                <label className="label-caps ml-1 block" htmlFor="password">
                   Password
                 </label>
                 <button
@@ -883,69 +875,70 @@ function LoginPageContent() {
             </Button>
           </form>
 
-          <div className="tonal-divider mt-8 flex flex-col gap-4 pt-6">
-            <button
-              type="button"
-              className="group flex items-center justify-between rounded-xl px-4 py-3 text-left transition-colors duration-150 hover:bg-[var(--surface-container-low)]"
-              onClick={() => void handleSendMagicLink()}
-              disabled={disableLoginActions}
-            >
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--surface-container-low)] text-primary">
-                  {isSendingMagicLink ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Mail className="h-4 w-4" />
-                  )}
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-[var(--on-surface)]">
-                    Email Magic Link
-                  </p>
-                  <p className="text-[11px] text-[var(--on-surface-variant)]">
-                    Sign in securely without a password
-                  </p>
-                </div>
-              </div>
-              <ArrowRight className="h-4 w-4 text-[var(--outline)] transition-transform group-hover:translate-x-1" />
-            </button>
+          {showMagicLinkOption || showPasskeyOption ? (
+            <div className="tonal-divider mt-8 flex flex-col gap-4 pt-6">
+              {showMagicLinkOption ? (
+                <button
+                  type="button"
+                  className="group flex items-center justify-between rounded-xl px-4 py-3 text-left transition-colors duration-150 hover:bg-[var(--surface-container-low)]"
+                  onClick={() => void handleSendMagicLink()}
+                  disabled={disableLoginActions}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--surface-container-low)] text-primary">
+                      {isSendingMagicLink ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Mail className="h-4 w-4" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--on-surface)]">
+                        Email Magic Link
+                      </p>
+                      <p className="text-[11px] text-[var(--on-surface-variant)]">
+                        Send a secure sign-in link to {normalizedEmail}
+                      </p>
+                    </div>
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-[var(--outline)] transition-transform group-hover:translate-x-1" />
+                </button>
+              ) : null}
 
-            <button
-              type="button"
-              className="group flex items-center justify-between rounded-xl px-4 py-3 text-left transition-colors duration-150 hover:bg-[var(--surface-container-low)]"
-              onClick={() => void handlePasskeySignIn()}
-              disabled={
-                disableLoginActions ||
-                !hasValidEmail ||
-                isCheckingPasskey ||
-                passkeyLookupEmail !== normalizedEmail ||
-                !hasRegisteredPasskey
-              }
-            >
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--surface-container-low)] text-primary">
-                  {isSigningInWithPasskey ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Fingerprint className="h-4 w-4" />
-                  )}
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-[var(--on-surface)]">
-                    Sign in with Passkey
-                  </p>
-                  <p className="text-[11px] text-[var(--on-surface-variant)]">
-                    {isCheckingPasskey
-                      ? "Checking registered passkeys for this email"
-                      : hasRegisteredPasskey
-                        ? "Use biometrics or a security key"
-                        : "Enter a valid work email to unlock passkeys"}
-                  </p>
-                </div>
-              </div>
-              <KeyRound className="h-4 w-4 text-[var(--outline)] transition-transform group-hover:translate-x-1" />
-            </button>
-          </div>
+              {showPasskeyOption ? (
+                <button
+                  type="button"
+                  className="group flex items-center justify-between rounded-xl px-4 py-3 text-left transition-colors duration-150 hover:bg-[var(--surface-container-low)]"
+                  onClick={() => void handlePasskeySignIn()}
+                  disabled={disableLoginActions || !showPasskeyOption}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--surface-container-low)] text-primary">
+                      {isSigningInWithPasskey ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Fingerprint className="h-4 w-4" />
+                      )}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--on-surface)]">
+                        Sign in with Passkey
+                      </p>
+                      <p className="text-[11px] text-[var(--on-surface-variant)]">
+                        Use biometrics or a security key
+                      </p>
+                    </div>
+                  </div>
+                  <KeyRound className="h-4 w-4 text-[var(--outline)] transition-transform group-hover:translate-x-1" />
+                </button>
+              ) : null}
+            </div>
+          ) : hasTypedEmail ? (
+            <AuthInfoBox>
+              Finish entering a valid work email to unlock passwordless sign-in
+              options.
+            </AuthInfoBox>
+          ) : null}
         </AuthPanel>
 
         <div className="mt-6 text-center text-sm text-[var(--on-surface-variant)]">
@@ -961,7 +954,6 @@ function LoginPageContent() {
         </div>
 
         <AuthTrustBadges />
-        <AuthFooterMeta />
       </div>
     </AuthCanvas>
   );

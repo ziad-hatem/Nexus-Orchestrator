@@ -155,12 +155,14 @@ export function MfaPanel({
         message={info}
         tone="info"
         className="mt-5"
+        centered
       />
       <FormStatusMessage
         id="mfa-error"
         message={error}
         tone="error"
         className="mt-4"
+        centered
       />
 
       <div className="mt-8 flex justify-center">

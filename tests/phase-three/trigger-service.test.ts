@@ -186,7 +186,8 @@ test("executeManualTrigger creates one accepted event, run, attempt, and audit e
 
   installCommonTriggerServiceNoops();
   triggerServiceDeps.getWorkflowRowByPublicId = async () => workflow;
-  triggerServiceDeps.getActiveTriggerBindingByWorkflowDbId = async () => binding;
+  triggerServiceDeps.getActiveTriggerBindingByWorkflowDbId = async () =>
+    binding;
   triggerServiceDeps.getWorkflowDraftRowByWorkflowDbId = async () => null;
   triggerServiceDeps.getWorkflowVersionRow = async () => version;
   triggerServiceDeps.enforceRateLimit = async () => ({
@@ -244,7 +245,10 @@ test("executeManualTrigger creates one accepted event, run, attempt, and audit e
     });
     return {} as never;
   };
-  triggerServiceDeps.updateWorkflowRunEventLink = async ({ eventId, runId }) => {
+  triggerServiceDeps.updateWorkflowRunEventLink = async ({
+    eventId,
+    runId,
+  }) => {
     eventLinks.push(`${eventId}:${runId}`);
   };
   triggerServiceDeps.updateWorkflowRunCreatedByEvent = async ({
@@ -293,7 +297,8 @@ test("simultaneous manual triggers with the same idempotency key create one run 
 
   installCommonTriggerServiceNoops();
   triggerServiceDeps.getWorkflowRowByPublicId = async () => workflow;
-  triggerServiceDeps.getActiveTriggerBindingByWorkflowDbId = async () => binding;
+  triggerServiceDeps.getActiveTriggerBindingByWorkflowDbId = async () =>
+    binding;
   triggerServiceDeps.getWorkflowDraftRowByWorkflowDbId = async () => null;
   triggerServiceDeps.getWorkflowVersionRow = async () => version;
   triggerServiceDeps.enforceRateLimit = async () => ({
@@ -330,7 +335,7 @@ test("simultaneous manual triggers with the same idempotency key create one run 
     });
   };
   triggerServiceDeps.getExecutionMaxRetries = () => 5;
-  triggerServiceDeps.createWorkflowRunAttemptRow = async () => ({} as never);
+  triggerServiceDeps.createWorkflowRunAttemptRow = async () => ({}) as never;
   triggerServiceDeps.updateWorkflowRunEventLink = async () => undefined;
   triggerServiceDeps.updateWorkflowRunCreatedByEvent = async () => undefined;
   triggerServiceDeps.enqueueWorkflowRunForExecution = async () => undefined;
@@ -486,7 +491,7 @@ test("duplicate webhook deliveries only create one pending run", async () => {
     });
   };
   triggerServiceDeps.getExecutionMaxRetries = () => 5;
-  triggerServiceDeps.createWorkflowRunAttemptRow = async () => ({} as never);
+  triggerServiceDeps.createWorkflowRunAttemptRow = async () => ({}) as never;
   triggerServiceDeps.updateWorkflowRunEventLink = async () => undefined;
   triggerServiceDeps.updateWorkflowRunCreatedByEvent = async () => undefined;
   triggerServiceDeps.enqueueWorkflowRunForExecution = async () => undefined;
@@ -508,8 +513,14 @@ test("duplicate webhook deliveries only create one pending run", async () => {
     }),
   ]);
 
-  assert.equal(results.filter((result) => result.kind === "accepted").length, 1);
-  assert.equal(results.filter((result) => result.kind === "duplicate").length, 1);
+  assert.equal(
+    results.filter((result) => result.kind === "accepted").length,
+    1,
+  );
+  assert.equal(
+    results.filter((result) => result.kind === "duplicate").length,
+    1,
+  );
   assert.equal(runCreateCount, 1);
   assert.deepEqual(eventStatuses.sort(), ["accepted", "duplicate"]);
 });
@@ -541,14 +552,14 @@ test("ingestInternalEvent fans out accepted runs to every matching binding", asy
       workflow_id: "workflow_db_1",
       workflow_version_id: "version_db_1",
       source_type: "internal_event",
-      match_key: "ticket.created",
+      match_key: "organization.created",
     }),
     createBindingRow({
       id: "binding_b",
       workflow_id: "workflow_db_2",
       workflow_version_id: "version_db_2",
       source_type: "internal_event",
-      match_key: "ticket.created",
+      match_key: "organization.created",
     }),
   ];
   const createdStatuses: string[] = [];
@@ -565,10 +576,12 @@ test("ingestInternalEvent fans out accepted runs to every matching binding", asy
   });
   triggerServiceDeps.reserveIdempotencyKey = async () => ({
     reserved: true,
-    key: "wf:internal:dedupe:ticket.created:evt_1",
+    key: "wf:internal:dedupe:organization.created:evt_1",
   });
   triggerServiceDeps.listWorkflowRowsByIds = async (workflowIds) =>
-    [workflowA, workflowB].filter((workflow) => workflowIds.includes(workflow.id));
+    [workflowA, workflowB].filter((workflow) =>
+      workflowIds.includes(workflow.id),
+    );
   triggerServiceDeps.listWorkflowVersionRowsByIds = async (versionIds) =>
     [versionA, versionB].filter((version) => versionIds.includes(version.id));
   triggerServiceDeps.createWorkflowIngestionEventRow = async (params) => {
@@ -603,14 +616,14 @@ test("ingestInternalEvent fans out accepted runs to every matching binding", asy
     });
   };
   triggerServiceDeps.getExecutionMaxRetries = () => 5;
-  triggerServiceDeps.createWorkflowRunAttemptRow = async () => ({} as never);
+  triggerServiceDeps.createWorkflowRunAttemptRow = async () => ({}) as never;
   triggerServiceDeps.updateWorkflowRunEventLink = async () => undefined;
   triggerServiceDeps.updateWorkflowRunCreatedByEvent = async () => undefined;
   triggerServiceDeps.enqueueWorkflowRunForExecution = async () => undefined;
 
   const result = await ingestInternalEvent({
     eventId: "evt_1",
-    eventKey: "ticket.created",
+    eventKey: "organization.created",
     source: "ticketing",
     payload: { ticketId: "T-100" },
     occurredAt: "2026-03-23T00:00:00.000Z",
@@ -628,14 +641,14 @@ test("internal-event rate limiting writes one limited event per matched binding 
     createBindingRow({
       id: "binding_a",
       source_type: "internal_event",
-      match_key: "payment.failed",
+      match_key: "organization.created",
     }),
     createBindingRow({
       id: "binding_b",
       workflow_id: "workflow_db_2",
       workflow_version_id: "version_db_2",
       source_type: "internal_event",
-      match_key: "payment.failed",
+      match_key: "organization.created",
     }),
   ];
   const createdStatuses: string[] = [];
@@ -668,7 +681,7 @@ test("internal-event rate limiting writes one limited event per matched binding 
     () =>
       ingestInternalEvent({
         eventId: "evt_2",
-        eventKey: "payment.failed",
+        eventKey: "organization.created",
         source: "billing",
         payload: { paymentId: "P-1" },
       }),
