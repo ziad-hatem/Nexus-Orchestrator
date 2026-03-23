@@ -8,6 +8,7 @@ import {
   THEME_PREFERENCES,
   type ThemePreference,
 } from "@/lib/theme";
+import { useSyncExternalStore } from "react";
 
 const THEME_META: Record<
   ThemePreference,
@@ -36,8 +37,17 @@ const THEME_META: Record<
 
 export function ThemeToggle() {
   const { themePreference, resolvedTheme, setThemePreference } = useTheme();
-  const ActiveIcon =
-    resolvedTheme === "dark" ? MoonStar : SunMedium;
+  const mounted = useSyncExternalStore(
+    () => () => undefined,
+    () => true,
+    () => false,
+  );
+
+  const ActiveIcon = !mounted
+    ? THEME_META[themePreference].icon
+    : resolvedTheme === "dark"
+      ? MoonStar
+      : SunMedium;
 
   return (
     <Popover.Root>

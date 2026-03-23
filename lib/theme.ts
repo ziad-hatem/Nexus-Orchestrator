@@ -6,6 +6,10 @@ export const THEME_PREFERENCES = ["light", "dark", "system"] as const;
 
 export type ThemePreference = (typeof THEME_PREFERENCES)[number];
 export type ResolvedTheme = "light" | "dark";
+export type ThemeSnapshot = {
+  themePreference: ThemePreference;
+  resolvedTheme: ResolvedTheme;
+};
 
 export const DEFAULT_THEME_PREFERENCE: ThemePreference = "system";
 
@@ -25,4 +29,27 @@ export function resolveThemePreference(
   }
 
   return preference;
+}
+
+export function parseThemePreference(
+  value: string | null | undefined,
+): ThemePreference {
+  return isThemePreference(value) ? value : DEFAULT_THEME_PREFERENCE;
+}
+
+export function resolveServerThemePreference(
+  preference: ThemePreference,
+): ResolvedTheme {
+  return preference === "dark" ? "dark" : "light";
+}
+
+export function deriveServerThemeSnapshot(
+  value: string | null | undefined,
+): ThemeSnapshot {
+  const themePreference = parseThemePreference(value);
+
+  return {
+    themePreference,
+    resolvedTheme: resolveServerThemePreference(themePreference),
+  };
 }

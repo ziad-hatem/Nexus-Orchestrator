@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import type {
   WorkflowRunDetail,
+  WorkflowRunListSummary,
   WorkflowRunSummary,
 } from "@/lib/server/workflows/types";
 import { useWorkspaceStore } from "@/lib/stores/workspace-store";
@@ -10,6 +11,7 @@ import { useWorkspaceStore } from "@/lib/stores/workspace-store";
 type ExecutionStoreHydratorProps = {
   directory?: {
     items: WorkflowRunSummary[];
+    summary: WorkflowRunListSummary;
     total: number;
     page: number;
     pageSize: number;

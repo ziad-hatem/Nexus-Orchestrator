@@ -18,6 +18,7 @@ type WorkspaceShellProps = {
   canManageMembers: boolean;
   canViewAuditLogs: boolean;
   canViewExecutions: boolean;
+  canViewOperations: boolean;
   canViewStreams: boolean;
   user: {
     name: string | null;
@@ -35,6 +36,7 @@ export function WorkspaceShell({
   canManageMembers,
   canViewAuditLogs,
   canViewExecutions,
+  canViewOperations,
   canViewStreams,
   user,
 }: WorkspaceShellProps) {
@@ -79,6 +81,7 @@ export function WorkspaceShell({
             canManageMembers={canManageMembers}
             canViewAuditLogs={canViewAuditLogs}
             canViewExecutions={canViewExecutions}
+            canViewOperations={canViewOperations}
             canViewStreams={canViewStreams}
           />
 

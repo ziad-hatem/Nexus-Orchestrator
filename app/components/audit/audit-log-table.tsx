@@ -6,7 +6,10 @@ import {
   FilterToolbar,
   type FilterSelectConfig,
 } from "@/app/components/ui/filter-toolbar";
-import type { AuditLogWithActor } from "@/lib/server/audit-log";
+import type {
+  AuditLogSummary,
+  AuditLogWithActor,
+} from "@/lib/server/audit-log";
 
 type AuditLogTableProps = {
   orgSlug: string;
@@ -19,6 +22,7 @@ type AuditLogTableProps = {
     action?: string;
   };
   availableActions: string[];
+  summary: AuditLogSummary;
 };
 
 function formatDateTime(value: string): string {
@@ -75,6 +79,7 @@ export function AuditLogTable({
   pageSize,
   filters,
   availableActions,
+  summary,
 }: AuditLogTableProps) {
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const canGoBack = page > 1;
@@ -109,11 +114,74 @@ export function AuditLogTable({
               Search, filter, and review role changes, invites, and administrative mutations for this tenant.
             </p>
           </div>
-          <div className="rounded-2xl bg-[rgba(255,255,255,0.12)] px-4 py-4 backdrop-blur-sm">
-            <p className="text-xs uppercase tracking-[0.18em] text-[rgba(255,255,255,0.68)]">
-              Matching events
-            </p>
-            <p className="mt-2 text-2xl font-bold">{total}</p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl bg-[rgba(255,255,255,0.12)] px-4 py-4 backdrop-blur-sm">
+              <p className="text-xs uppercase tracking-[0.18em] text-[rgba(255,255,255,0.68)]">
+                Matching events
+              </p>
+              <p className="mt-2 text-2xl font-bold">{total}</p>
+            </div>
+            <div className="rounded-2xl bg-[rgba(255,255,255,0.12)] px-4 py-4 backdrop-blur-sm">
+              <p className="text-xs uppercase tracking-[0.18em] text-[rgba(255,255,255,0.68)]">
+                Unique actors
+              </p>
+              <p className="mt-2 text-2xl font-bold">{summary.uniqueActorCount}</p>
+            </div>
+            <div className="rounded-2xl bg-[rgba(255,255,255,0.12)] px-4 py-4 backdrop-blur-sm">
+              <p className="text-xs uppercase tracking-[0.18em] text-[rgba(255,255,255,0.68)]">
+                Coverage
+              </p>
+              <p className="mt-2 text-2xl font-bold">
+                {summary.coverage.coveredCount}/{summary.coverage.totalRequired}
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+        <div className="glass-panel rounded-[1.75rem] p-5 sm:p-6">
+          <p className="label-caps">Top actions</p>
+          <div className="mt-4 flex flex-wrap gap-3">
+            {summary.topActions.length > 0 ? (
+              summary.topActions.map((item) => (
+                <div
+                  key={item.action}
+                  className="rounded-2xl bg-[var(--surface-container-low)] px-4 py-3"
+                >
+                  <p className="label-caps">{item.action}</p>
+                  <p className="mt-2 text-sm font-semibold text-[var(--on-surface)]">
+                    {item.count} event{item.count === 1 ? "" : "s"}
+                  </p>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-2xl bg-[var(--surface-container-low)] px-4 py-3 text-sm text-[var(--on-surface-variant)]">
+                No matching audit actions yet.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="glass-panel rounded-[1.75rem] p-5 sm:p-6">
+          <p className="label-caps">Coverage gaps</p>
+          <div className="mt-4 flex flex-wrap gap-3">
+            {summary.coverage.missingActions.length > 0 ? (
+              summary.coverage.missingActions.map((action) => (
+                <div
+                  key={action}
+                  className="rounded-2xl bg-[var(--surface-container-low)] px-4 py-3"
+                >
+                  <p className="text-sm font-semibold text-[var(--on-surface)]">
+                    {action}
+                  </p>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-2xl bg-[var(--surface-container-low)] px-4 py-3 text-sm text-[var(--on-surface-variant)]">
+                All required privileged audit actions are represented in this dataset.
+              </div>
+            )}
           </div>
         </div>
       </section>

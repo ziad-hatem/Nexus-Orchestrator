@@ -340,7 +340,7 @@ export function WorkflowCanvasEditor({
   const handleAddAction = (
     position?: WorkflowCanvas["nodes"][number]["position"],
   ): string => {
-    const action = createWorkflowActionDefinition("notify");
+    const action = createWorkflowActionDefinition("send_email");
     const newActionId = action.id;
     updateDraft((current) => ({
       ...current,

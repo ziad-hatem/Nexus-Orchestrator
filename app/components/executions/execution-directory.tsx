@@ -2,11 +2,15 @@ import Link from "next/link";
 import { ArrowRight, Search } from "lucide-react";
 import { Button } from "@/app/components/ui/button";
 import { WorkflowToolbar } from "@/app/components/workflows/workflow-toolbar";
-import type { WorkflowRunSummary } from "@/lib/server/workflows/types";
+import type {
+  WorkflowRunListSummary,
+  WorkflowRunSummary,
+} from "@/lib/server/workflows/types";
 
 type ExecutionDirectoryProps = {
   orgSlug: string;
   items: WorkflowRunSummary[];
+  summary: WorkflowRunListSummary;
   total: number;
   page: number;
   pageSize: number;
@@ -35,14 +39,12 @@ function buildHref(
 export function ExecutionDirectory({
   orgSlug,
   items,
+  summary,
   total,
   page,
   pageSize,
   filters,
 }: ExecutionDirectoryProps) {
-  const runningCount = items.filter((item) => item.status === "running").length;
-  const failedCount = items.filter((item) => item.status === "failed").length;
-  const retryingCount = items.filter((item) => item.status === "retrying").length;
   const lastPage = Math.max(1, Math.ceil(total / pageSize));
 
   return (
@@ -57,19 +59,53 @@ export function ExecutionDirectory({
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <div className="glass-panel rounded-[1.5rem] p-5">
           <p className="label-caps">Total runs</p>
-          <p className="mt-3 text-3xl font-bold text-[var(--on-surface)]">{total}</p>
+          <p className="mt-3 text-3xl font-bold text-[var(--on-surface)]">{summary.total}</p>
         </div>
         <div className="glass-panel rounded-[1.5rem] p-5">
           <p className="label-caps">Running</p>
-          <p className="mt-3 text-3xl font-bold text-primary">{runningCount}</p>
+          <p className="mt-3 text-3xl font-bold text-primary">{summary.running}</p>
         </div>
         <div className="glass-panel rounded-[1.5rem] p-5">
           <p className="label-caps">Retrying</p>
-          <p className="mt-3 text-3xl font-bold text-amber-500">{retryingCount}</p>
+          <p className="mt-3 text-3xl font-bold text-amber-500">{summary.retrying}</p>
         </div>
         <div className="glass-panel rounded-[1.5rem] p-5">
           <p className="label-caps">Failed</p>
-          <p className="mt-3 text-3xl font-bold text-destructive">{failedCount}</p>
+          <p className="mt-3 text-3xl font-bold text-destructive">{summary.failed}</p>
+        </div>
+        <div className="glass-panel rounded-[1.5rem] p-5 md:col-span-2 xl:col-span-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="label-caps">Error summary</p>
+              <p className="mt-2 text-lg font-semibold text-[var(--on-surface)]">
+                Top failure codes in the current result set
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3 text-sm text-[var(--on-surface-variant)]">
+              <span>Pending {summary.pending}</span>
+              <span>Success {summary.success}</span>
+              <span>Cancelled {summary.cancelled}</span>
+            </div>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-3">
+            {summary.topFailureCodes.length > 0 ? (
+              summary.topFailureCodes.map((item) => (
+                <div
+                  key={item.failureCode}
+                  className="rounded-2xl bg-[var(--surface-container-low)] px-4 py-3"
+                >
+                  <p className="label-caps">{item.failureCode}</p>
+                  <p className="mt-2 text-sm font-semibold text-[var(--on-surface)]">
+                    {item.count} run{item.count === 1 ? "" : "s"}
+                  </p>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-2xl bg-[var(--surface-container-low)] px-4 py-3 text-sm text-[var(--on-surface-variant)]">
+                No failure codes matched the current filters.
+              </div>
+            )}
+          </div>
         </div>
       </section>
 
@@ -81,7 +117,7 @@ export function ExecutionDirectory({
               type="text"
               name="query"
               defaultValue={filters.query ?? ""}
-              placeholder="Search by run id, workflow, or correlation id"
+              placeholder="Search by run id, workflow, correlation id, or failure text"
               className="input-field h-12 w-full border-0 pl-10 shadow-none"
             />
           </div>
@@ -149,6 +185,11 @@ export function ExecutionDirectory({
                       <span className="rounded-full bg-[var(--surface-container-high)] px-3 py-1 text-xs font-semibold capitalize text-[var(--on-surface)]">
                         {item.status}
                       </span>
+                      {item.retryEligible ? (
+                        <p className="mt-1 text-xs text-amber-600 dark:text-amber-300">
+                          Retry available
+                        </p>
+                      ) : null}
                     </td>
                     <td className="px-6 py-4 text-sm text-[var(--on-surface-variant)]">{item.triggerSource}</td>
                     <td className="px-6 py-4 text-sm text-[var(--on-surface-variant)]">v{item.workflowVersionNumber}</td>

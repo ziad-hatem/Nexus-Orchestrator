@@ -14,8 +14,13 @@ import {
   WORKFLOW_CONDITION_BRANCH_KEYS,
   WORKFLOW_CONDITION_OPERATORS,
   WORKFLOW_CONDITION_RESOLVER_SCOPES,
+  WORKFLOW_RECORD_VALUE_TYPES,
   INTERNAL_EVENT_KEYS,
 } from "@/lib/server/workflows/types";
+import {
+  hasTemplateTokens,
+  validateTemplateString,
+} from "@/lib/server/actions/templating";
 
 export const roleSchema = z.enum(ORGANIZATION_ROLES);
 export const membershipStatusSchema = z.enum(["active", "suspended"]);
@@ -91,6 +96,9 @@ export const workflowActionTypeSchema = z.enum(WORKFLOW_ACTION_TYPES);
 export const workflowConditionBranchKeySchema = z.enum(
   WORKFLOW_CONDITION_BRANCH_KEYS,
 );
+export const workflowRecordValueTypeSchema = z.enum(
+  WORKFLOW_RECORD_VALUE_TYPES,
+);
 export const workflowConditionResolverScopeSchema = z.enum(
   WORKFLOW_CONDITION_RESOLVER_SCOPES,
 );
@@ -100,6 +108,50 @@ export const workflowConditionOperatorSchema = z.enum(
 export const workflowRunStatusSchema = z.enum(WORKFLOW_RUN_STATUSES);
 
 const workflowConfigRecordSchema = z.record(z.string(), z.unknown());
+const workflowTemplateStringSchema = z
+  .string()
+  .max(5000, "Template is too long")
+  .refine((value) => validateTemplateString(value).length === 0, {
+    message: "Template syntax is invalid. Only {{ payload.* }} and {{ context.* }} are supported.",
+  });
+const workflowOptionalTemplateStringSchema = workflowTemplateStringSchema
+  .optional()
+  .or(z.literal(""))
+  .transform((value) => (typeof value === "string" ? value : ""));
+const workflowWebhookHeaderSchema = z.record(
+  z.string().trim().min(1).max(120),
+  workflowTemplateStringSchema,
+);
+const workflowLegacyActionMetaSchema = {
+  legacySourceType: z
+    .string()
+    .trim()
+    .max(120)
+    .nullable()
+    .optional()
+    .transform((value) => value ?? null),
+  legacyIssue: z
+    .string()
+    .trim()
+    .max(500)
+    .nullable()
+    .optional()
+    .transform((value) => value ?? null),
+};
+
+export const WORKFLOW_RECORD_FIELD_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
+
+export function isSafeWorkflowRecordFieldKey(value: string): boolean {
+  return WORKFLOW_RECORD_FIELD_KEY_PATTERN.test(value.trim());
+}
+
+export function isIsoDateLike(value: string): boolean {
+  return !Number.isNaN(Date.parse(value));
+}
+
+export function hasRuntimeTemplateTokens(value: string): boolean {
+  return hasTemplateTokens(value);
+}
 
 export const workflowMetadataSchema = z.object({
   name: z
@@ -165,13 +217,71 @@ export const workflowConditionConfigSchema = z.object({
     .transform((value) => value ?? null),
 });
 
-export const workflowActionConfigSchema = z.object({
+const workflowActionBaseSchema = {
   id: z.string().trim().min(1).max(120),
   label: z.string().trim().min(1).max(120),
   description: z.string().trim().max(400).default(""),
-  type: workflowActionTypeSchema,
+  ...workflowLegacyActionMetaSchema,
+};
+
+const workflowSendWebhookActionSchema = z.object({
+  ...workflowActionBaseSchema,
+  type: z.literal("send_webhook"),
+  config: z.object({
+    url: workflowTemplateStringSchema,
+    method: z.enum(["POST", "PUT", "PATCH"]).default("POST"),
+    headers: workflowWebhookHeaderSchema.default({}),
+    body: workflowTemplateStringSchema.default(""),
+  }),
+});
+
+const workflowSendEmailActionSchema = z.object({
+  ...workflowActionBaseSchema,
+  type: z.literal("send_email"),
+  config: z.object({
+    to: workflowTemplateStringSchema,
+    subject: workflowTemplateStringSchema,
+    body: workflowTemplateStringSchema,
+    replyTo: workflowOptionalTemplateStringSchema,
+  }),
+});
+
+const workflowCreateTaskActionSchema = z.object({
+  ...workflowActionBaseSchema,
+  type: z.literal("create_task"),
+  config: z.object({
+    title: workflowTemplateStringSchema,
+    description: workflowOptionalTemplateStringSchema,
+    assigneeEmail: workflowOptionalTemplateStringSchema,
+    dueAt: workflowOptionalTemplateStringSchema,
+  }),
+});
+
+const workflowUpdateRecordActionSchema = z.object({
+  ...workflowActionBaseSchema,
+  type: z.literal("update_record_field"),
+  config: z.object({
+    recordType: workflowTemplateStringSchema,
+    recordKey: workflowTemplateStringSchema,
+    field: workflowTemplateStringSchema,
+    valueType: workflowRecordValueTypeSchema.default("string"),
+    valueTemplate: workflowOptionalTemplateStringSchema,
+  }),
+});
+
+const workflowLegacyActionSchema = z.object({
+  ...workflowActionBaseSchema,
+  type: z.literal("legacy_custom"),
   config: workflowConfigRecordSchema.default({}),
 });
+
+export const workflowActionConfigSchema = z.discriminatedUnion("type", [
+  workflowSendWebhookActionSchema,
+  workflowSendEmailActionSchema,
+  workflowCreateTaskActionSchema,
+  workflowUpdateRecordActionSchema,
+  workflowLegacyActionSchema,
+]);
 
 export const workflowCanvasNodeSchema = z.object({
   id: z.string().trim().min(1).max(120),
@@ -357,6 +467,30 @@ export const cancelRunSchema = z.object({
     .optional()
     .or(z.literal(""))
     .transform((value) => (typeof value === "string" && value ? value : undefined)),
+});
+
+export const retryRunSchema = z.object({
+  reason: z
+    .string()
+    .trim()
+    .max(300, "Retry note must be 300 characters or fewer")
+    .optional()
+    .or(z.literal(""))
+    .transform((value) => (typeof value === "string" && value ? value : undefined)),
+});
+
+export const operationsDashboardQuerySchema = z.object({
+  emitAlerts: z
+    .union([z.boolean(), z.string()])
+    .optional()
+    .transform((value) => value === true || value === "true"),
+});
+
+export const retentionScriptOptionsSchema = z.object({
+  dryRun: z.boolean().default(false),
+  auditLogDays: z.number().int().min(1).optional(),
+  executionLogDays: z.number().int().min(1).optional(),
+  ingestionEventDays: z.number().int().min(1).optional(),
 });
 
 export const orgSlugSchema = z

@@ -4,6 +4,7 @@ import {
   canManageMembers,
   canViewAuditLogs,
   canViewExecutions,
+  canViewOperations,
   canViewStreams,
 } from "@/lib/server/permissions";
 import { requirePageOrgAccess } from "@/lib/server/org-access";
@@ -52,6 +53,7 @@ export default async function OrganizationLayout({
       canManageMembers={canManageMembers(context.membership.role)}
       canViewAuditLogs={canViewAuditLogs(context.membership.role)}
       canViewExecutions={canViewExecutions(context.membership.role)}
+      canViewOperations={canViewOperations(context.membership.role)}
       canViewStreams={canViewStreams(context.membership.role)}
       user={{
         name: workspaceUser?.name ?? session?.user?.name ?? null,

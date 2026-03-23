@@ -4,6 +4,7 @@ import { ExecutionStoreHydrator } from "@/app/components/executions/execution-st
 import { requirePageOrgAccess } from "@/lib/server/org-access";
 import {
   canCancelRuns,
+  canRetryRuns,
   canViewExecutions,
 } from "@/lib/server/permissions";
 import {
@@ -45,6 +46,7 @@ export default async function ExecutionDetailPage({
         orgSlug={orgSlug}
         detail={detail}
         canCancelRuns={canCancelRuns(context.membership.role)}
+        canRetryRuns={canRetryRuns(context.membership.role)}
       />
     </>
   );

@@ -50,12 +50,14 @@ export function WorkspaceNav({
   canManageMembers,
   canViewAuditLogs,
   canViewExecutions,
+  canViewOperations,
   canViewStreams,
 }: {
   organizationSlug: string;
   canManageMembers: boolean;
   canViewAuditLogs: boolean;
   canViewExecutions: boolean;
+  canViewOperations: boolean;
   canViewStreams: boolean;
 }) {
   const pathname = usePathname();
@@ -104,6 +106,15 @@ export function WorkspaceNav({
             href: `${basePath}/executions`,
             label: "Executions",
             icon: ListChecks,
+          },
+        ]
+      : []),
+    ...(canViewOperations
+      ? [
+          {
+            href: `${basePath}/operations`,
+            label: "Operations",
+            icon: ShieldCheck,
           },
         ]
       : []),

@@ -3,16 +3,22 @@ import { executeWorkflowActionNode } from "@/lib/server/executions/executors";
 import {
   cancelWorkflowRunImmediately,
   claimWorkflowRunForExecution,
+  completeWorkflowRunAttempt,
+  createWorkflowRunAttemptRow,
   createWorkflowRunStepRow,
   getWorkflowIngestionOriginById,
+  getWorkflowRunAttemptRow,
   getWorkflowRunRowByDbId,
   getWorkflowRunRowByPublicId,
+  listWorkflowRunAttemptRows,
   listWorkflowRunRowsByOrganization,
   listWorkflowRunStepRows,
   markWorkflowRunCancelledFromWorker,
   markWorkflowRunFailed,
+  markWorkflowRunAttemptRunning,
   markWorkflowRunRetrying,
   markWorkflowRunSuccess,
+  queueWorkflowRunForManualRetry,
   requestWorkflowRunCancellation,
   touchWorkflowRunHeartbeat,
   updateWorkflowRunStepRow,
@@ -26,13 +32,27 @@ import {
 import type {
   ExecutionQueueJob,
   RunCancellationResult,
+  RunRetryResult,
   WorkflowConditionStepLogData,
   WorkflowConditionStepOutput,
+  WorkflowRunAttemptRecord,
   WorkflowRunDetail,
+  WorkflowRunFailureSummary,
+  WorkflowRunListSummary,
   WorkflowRunRow,
   WorkflowRunSummary,
 } from "@/lib/server/executions/types";
 import { createChildLogger, writeLog } from "@/lib/observability/logger";
+import {
+  redactRecord,
+  redactSensitiveData,
+  redactUnknownArray,
+} from "@/lib/observability/redaction";
+import {
+  emitOperationalAlert,
+  evaluateOperationalAlerts,
+  getOperationsAlertLookbackMinutes,
+} from "@/lib/observability/alerts";
 import {
   ConditionEvaluationError,
   evaluateWorkflowCondition,
@@ -45,6 +65,7 @@ import {
   getWorkflowVersionRowById,
   listWorkflowActorsByIds,
 } from "@/lib/server/workflows/repository";
+import { incrementWindowCounter } from "@/lib/server/triggers/rate-limit";
 import {
   isWorkflowConditionBranchKey,
   normalizeValidationIssues,
@@ -54,6 +75,7 @@ import {
   type WorkflowCanvasEdge,
   type WorkflowConditionConfig,
   type WorkflowDraftDocument,
+  type WorkflowRunAttemptLaunchReason,
   type WorkflowRunStatus,
   type WorkflowSourceContext,
 } from "@/lib/server/workflows/types";
@@ -83,6 +105,12 @@ function normalizeLogs(value: unknown): Array<Record<string, unknown>> {
         Boolean(item && typeof item === "object" && !Array.isArray(item)),
       )
     : [];
+}
+
+function sanitizeLogRecords(
+  value: Array<Record<string, unknown>>,
+): Array<Record<string, unknown>> {
+  return redactUnknownArray(value.map((item) => ({ ...item })));
 }
 
 function mapSourceContext(value: unknown): WorkflowSourceContext {
@@ -115,7 +143,32 @@ function mapSourceContext(value: unknown): WorkflowSourceContext {
   };
 }
 
-function buildQueueJob(run: WorkflowRunRow, reason: "trigger" | "retry"): ExecutionQueueJob {
+function mapQueueReasonToLaunchReason(
+  reason: ExecutionQueueJob["reason"],
+): WorkflowRunAttemptLaunchReason {
+  if (reason === "manual_retry") {
+    return "manual_retry";
+  }
+
+  if (reason === "retry") {
+    return "automatic_retry";
+  }
+
+  return "initial";
+}
+
+function isRetryEligible(status: WorkflowRunStatus): boolean {
+  return status === "failed" || status === "cancelled";
+}
+
+function isCancelEligible(status: WorkflowRunStatus): boolean {
+  return !["success", "failed", "cancelled"].includes(status);
+}
+
+function buildQueueJob(
+  run: WorkflowRunRow,
+  reason: ExecutionQueueJob["reason"],
+): ExecutionQueueJob {
   return {
     runDbId: run.id,
     organizationId: run.organization_id,
@@ -148,9 +201,51 @@ function mapRunSummary(params: {
     cancelledAt: params.run.cancelled_at,
     createdAt: params.run.created_at,
     lastHeartbeatAt: params.run.last_heartbeat_at,
+    nextRetryAt: params.run.next_retry_at,
+    lastRetryAt: params.run.last_retry_at,
     failureCode: params.run.failure_code,
     failureMessage: params.run.failure_message,
     idempotencyKey: params.run.idempotency_key,
+    retryEligible: isRetryEligible(params.run.status),
+    cancelEligible: isCancelEligible(params.run.status),
+  };
+}
+
+function buildRunListSummary(items: WorkflowRunSummary[]): WorkflowRunListSummary {
+  const counts: Record<WorkflowRunStatus, number> = {
+    pending: 0,
+    running: 0,
+    success: 0,
+    failed: 0,
+    retrying: 0,
+    cancelled: 0,
+  };
+  const failureCounts = new Map<string, number>();
+
+  for (const item of items) {
+    counts[item.status] += 1;
+    if (item.failureCode) {
+      failureCounts.set(item.failureCode, (failureCounts.get(item.failureCode) ?? 0) + 1);
+    }
+  }
+
+  const topFailureCodes: WorkflowRunFailureSummary[] = Array.from(failureCounts.entries())
+    .sort((left, right) => right[1] - left[1])
+    .slice(0, 5)
+    .map(([failureCode, count]) => ({
+      failureCode,
+      count,
+    }));
+
+  return {
+    total: items.length,
+    pending: counts.pending,
+    running: counts.running,
+    success: counts.success,
+    failed: counts.failed,
+    retrying: counts.retrying,
+    cancelled: counts.cancelled,
+    topFailureCodes,
   };
 }
 
@@ -179,6 +274,85 @@ async function hydrateRunSummaries(
       });
     })
     .filter((candidate): candidate is WorkflowRunSummary => candidate !== null);
+}
+
+function mapAttemptRecord(params: {
+  attempt: Awaited<ReturnType<typeof listWorkflowRunAttemptRows>>[number];
+  actorMap: Map<string, { id: string; name: string | null; email: string | null }>;
+}): WorkflowRunAttemptRecord {
+  return {
+    attemptNumber: params.attempt.attempt_number,
+    launchReason: params.attempt.launch_reason,
+    requestedBy:
+      params.attempt.requested_by_user_id
+        ? params.actorMap.get(params.attempt.requested_by_user_id) ?? null
+        : null,
+    requestNote: params.attempt.request_note,
+    scheduledFor: params.attempt.scheduled_for,
+    backoffSeconds: params.attempt.backoff_seconds,
+    status: params.attempt.status,
+    failureCode: params.attempt.failure_code,
+    failureMessage: params.attempt.failure_message,
+    startedAt: params.attempt.started_at,
+    completedAt: params.attempt.completed_at,
+  };
+}
+
+function buildFallbackAttemptHistory(params: {
+  run: WorkflowRunRow;
+  steps: Awaited<ReturnType<typeof listWorkflowRunStepRows>>;
+}): WorkflowRunAttemptRecord[] {
+  const groupedSteps = new Map<number, Awaited<ReturnType<typeof listWorkflowRunStepRows>>>();
+  for (const step of params.steps) {
+    const group = groupedSteps.get(step.attempt_number) ?? [];
+    group.push(step);
+    groupedSteps.set(step.attempt_number, group);
+  }
+
+  const maxAttempt = Math.max(
+    params.run.attempt_count,
+    ...Array.from(groupedSteps.keys()),
+    0,
+  );
+
+  return Array.from({ length: maxAttempt }, (_, index) => {
+    const attemptNumber = index + 1;
+    const steps = groupedSteps.get(attemptNumber) ?? [];
+    const firstStep = steps[0];
+    const lastStep = steps[steps.length - 1];
+    const isCurrentAttempt = attemptNumber === params.run.attempt_count;
+
+    let status: WorkflowRunAttemptRecord["status"] = "scheduled";
+    if (isCurrentAttempt) {
+      if (params.run.status === "pending" || params.run.status === "retrying") {
+        status = "scheduled";
+      } else if (params.run.status === "running") {
+        status = "running";
+      } else if (params.run.status === "success") {
+        status = "success";
+      } else if (params.run.status === "cancelled") {
+        status = "cancelled";
+      } else {
+        status = "failed";
+      }
+    } else if (steps.length > 0) {
+      status = steps.some((step) => step.status === "cancelled") ? "cancelled" : "failed";
+    }
+
+    return {
+      attemptNumber,
+      launchReason: attemptNumber === 1 ? "initial" : "automatic_retry",
+      requestedBy: null,
+      requestNote: null,
+      scheduledFor: firstStep?.started_at ?? params.run.created_at,
+      backoffSeconds: null,
+      status,
+      failureCode: isCurrentAttempt ? params.run.failure_code : null,
+      failureMessage: isCurrentAttempt ? params.run.failure_message : null,
+      startedAt: firstStep?.started_at ?? null,
+      completedAt: lastStep?.completed_at ?? null,
+    };
+  });
 }
 
 function buildNodeSnapshot(params: {
@@ -231,7 +405,7 @@ async function startStep(params: {
     branchTaken: params.branchTaken ?? null,
     status: "running",
     correlationId: params.run.correlation_id,
-    inputPayload: toRecord(params.run.payload),
+    inputPayload: redactRecord(toRecord(params.run.payload)),
     logs: [],
     startedAt: new Date().toISOString(),
   });
@@ -249,10 +423,10 @@ async function finishStep(params: {
     stepId: params.stepId,
     patch: {
       status: params.status,
-      output_payload: params.output ?? {},
+      output_payload: redactRecord(params.output ?? {}),
       error_code: params.errorCode ?? null,
       error_message: params.errorMessage ?? null,
-      logs: params.logs ?? [],
+      logs: sanitizeLogRecords(params.logs ?? []),
       completed_at: new Date().toISOString(),
     },
   });
@@ -272,6 +446,41 @@ function getRetryDelaySeconds(attemptCount: number): number {
   const delays = getExecutionRetryDelaysSeconds();
   const index = Math.max(0, Math.min(delays.length - 1, attemptCount - 1));
   return delays[index] ?? delays[delays.length - 1] ?? 30;
+}
+
+async function trackRetryExhaustionAlert(params: {
+  organizationId: string;
+  workflowId: string;
+  runId: string;
+  correlationId: string;
+  failureCode: string;
+}) {
+  const current = await incrementWindowCounter({
+    key: `wf:metrics:retry_exhausted:${params.organizationId}`,
+    windowSeconds: getOperationsAlertLookbackMinutes() * 60,
+  });
+
+  const [alert] = evaluateOperationalAlerts({
+    queueBacklog: 0,
+    staleRunningCount: 0,
+    recentWebhookRejections: 0,
+    retryExhaustionCount: current.current,
+  }).filter((candidate) => candidate.key === "retry_exhaustion");
+
+  if (alert && alert.status !== "ok") {
+    emitOperationalAlert({
+      alert,
+      context: {
+        organizationId: params.organizationId,
+        workflowId: params.workflowId,
+        runId: params.runId,
+        correlationId: params.correlationId,
+      },
+      extras: {
+        failureCode: params.failureCode,
+      },
+    });
+  }
 }
 
 async function isCancellationRequested(runDbId: string): Promise<boolean> {
@@ -495,11 +704,19 @@ async function executeRunAttempt(params: {
         nodeSnapshot: buildNodeSnapshot({ node: activeNode, action }),
       });
       sequenceNumber += 1;
+      const payload = toRecord(params.run.payload);
+      const sourceContext = mapSourceContext(params.run.source_context);
       const result = await executeWorkflowActionNode({
         action,
         context: {
           run: params.run,
+          stepId: step.id,
           correlationId: params.run.correlation_id,
+          organizationId: params.run.organization_id,
+          workflowId: params.run.workflow_id,
+          workflowVersionId: params.run.workflow_version_id,
+          payload,
+          sourceContext,
         },
       });
 
@@ -544,7 +761,7 @@ async function executeRunAttempt(params: {
 
 export async function enqueueWorkflowRunForExecution(params: {
   run: WorkflowRunRow;
-  reason?: "trigger" | "retry";
+  reason?: ExecutionQueueJob["reason"];
 }) {
   if (!["pending", "retrying"].includes(params.run.status)) {
     return;
@@ -572,7 +789,24 @@ export async function listWorkflowRunSummaries(params: {
     if (params.filters.status && item.status !== params.filters.status) return false;
     if (params.filters.source && item.triggerSource !== params.filters.source) return false;
     if (params.filters.workflowId && item.workflowId !== params.filters.workflowId) return false;
-    if (query && ![item.runId, item.workflowId, item.workflowName, item.correlationId, item.status, item.triggerSource].join(" ").toLowerCase().includes(query)) return false;
+    if (
+      query &&
+      ![
+        item.runId,
+        item.workflowId,
+        item.workflowName,
+        item.correlationId,
+        item.status,
+        item.triggerSource,
+        item.failureCode ?? "",
+        item.failureMessage ?? "",
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(query)
+    ) {
+      return false;
+    }
     return true;
   });
 
@@ -583,6 +817,7 @@ export async function listWorkflowRunSummaries(params: {
     total,
     page: params.filters.page,
     pageSize: params.filters.pageSize,
+    summary: buildRunListSummary(filtered),
   };
 }
 
@@ -595,11 +830,12 @@ export async function getWorkflowRunDetail(params: {
     throw new WorkflowExecutionNotFoundError();
   }
 
-  const [workflowRows, versionRows, version, steps, originEvent] = await Promise.all([
+  const [workflowRows, versionRows, version, steps, attemptRows, originEvent] = await Promise.all([
     listWorkflowRowsByIds([run.workflow_id]),
     listWorkflowVersionRowsByIds([run.workflow_version_id]),
     getWorkflowVersionRowById(run.workflow_version_id),
     listWorkflowRunStepRows(run.id),
+    listWorkflowRunAttemptRows(run.id),
     run.created_by_event_id ? getWorkflowIngestionOriginById(run.created_by_event_id) : Promise.resolve(null),
   ]);
   const workflowRow = workflowRows[0];
@@ -609,7 +845,11 @@ export async function getWorkflowRunDetail(params: {
   }
 
   const sourceContext = mapSourceContext(run.source_context);
-  const actorIds = [originEvent?.triggered_by_user_id, sourceContext.actorUserId].filter(
+  const actorIds = [
+    originEvent?.triggered_by_user_id,
+    sourceContext.actorUserId,
+    ...attemptRows.map((attempt) => attempt.requested_by_user_id),
+  ].filter(
     (value): value is string => Boolean(value),
   );
   const actorMap = new Map(
@@ -620,12 +860,21 @@ export async function getWorkflowRunDetail(params: {
     throw new WorkflowExecutionNotFoundError();
   }
 
+  const attempts =
+    attemptRows.length > 0
+      ? attemptRows.map((attempt) => mapAttemptRecord({ attempt, actorMap }))
+      : buildFallbackAttemptHistory({
+          run,
+          steps,
+        });
+
   return {
     ...summary,
-    sourceContext,
-    payload: toRecord(run.payload),
+    sourceContext: redactSensitiveData(sourceContext),
+    payload: redactRecord(toRecord(run.payload)),
     createdByEventId: run.created_by_event_id,
     cancelRequestedAt: run.cancel_requested_at,
+    attempts,
     versionValidationIssues: normalizeValidationIssues(version.validation_issues),
     recentEvent: originEvent
       ? {
@@ -645,11 +894,11 @@ export async function getWorkflowRunDetail(params: {
       branchTaken: isWorkflowConditionBranchKey(row.branch_taken) ? row.branch_taken : null,
       status: row.status,
       correlationId: row.correlation_id,
-      inputPayload: toRecord(row.input_payload),
-      outputPayload: toRecord(row.output_payload),
+      inputPayload: redactRecord(toRecord(row.input_payload)),
+      outputPayload: redactRecord(toRecord(row.output_payload)),
       errorCode: row.error_code,
       errorMessage: row.error_message,
-      logs: normalizeLogs(row.logs),
+      logs: sanitizeLogRecords(normalizeLogs(row.logs)),
       startedAt: row.started_at,
       completedAt: row.completed_at,
     })),
@@ -692,6 +941,16 @@ export async function cancelWorkflowRun(params: {
     throw new WorkflowExecutionConflictError("Run state changed before cancellation could be applied.");
   }
 
+  if (run.status !== "running") {
+    await completeWorkflowRunAttempt({
+      runDbId: run.id,
+      attemptNumber: run.attempt_count + 1,
+      status: "cancelled",
+      failureCode: "cancelled_by_user",
+      failureMessage,
+    });
+  }
+
   await writeAuditLog({
     organizationId: params.organizationId,
     actorUserId: params.actorUserId,
@@ -720,11 +979,127 @@ export async function cancelWorkflowRun(params: {
   };
 }
 
+export async function retryWorkflowRun(params: {
+  organizationId: string;
+  runId: string;
+  actorUserId: string;
+  reason?: string;
+  request?: Request | null;
+}): Promise<RunRetryResult> {
+  const run = await getWorkflowRunRowByPublicId({
+    organizationId: params.organizationId,
+    runId: params.runId,
+  });
+  if (!run) {
+    throw new WorkflowExecutionNotFoundError();
+  }
+  if (!isRetryEligible(run.status)) {
+    throw new WorkflowExecutionConflictError(
+      "Only failed or cancelled runs can be retried.",
+    );
+  }
+
+  const updated = await queueWorkflowRunForManualRetry({
+    runDbId: run.id,
+  });
+  if (!updated) {
+    throw new WorkflowExecutionConflictError(
+      "Run state changed before retry could be scheduled.",
+    );
+  }
+
+  const attemptNumber = updated.attempt_count + 1;
+  await createWorkflowRunAttemptRow({
+    runId: updated.id,
+    organizationId: updated.organization_id,
+    workflowId: updated.workflow_id,
+    workflowVersionId: updated.workflow_version_id,
+    attemptNumber,
+    launchReason: "manual_retry",
+    requestedByUserId: params.actorUserId,
+    requestNote: params.reason?.trim() || null,
+    scheduledFor: new Date().toISOString(),
+    backoffSeconds: 0,
+    status: "scheduled",
+  });
+
+  await enqueueWorkflowRunForExecution({
+    run: updated,
+    reason: "manual_retry",
+  });
+
+  await writeAuditLog({
+    organizationId: params.organizationId,
+    actorUserId: params.actorUserId,
+    action: "workflow.run_retried",
+    entityType: "workflow_run",
+    entityId: run.run_key,
+    metadata: {
+      runId: run.run_key,
+      workflowDbId: run.workflow_id,
+      reason: params.reason?.trim() || null,
+      attemptNumber,
+      previousStatus: run.status,
+      correlationId: run.correlation_id,
+    },
+    request: params.request,
+  });
+
+  const [summary] = await hydrateRunSummaries([updated]);
+  if (!summary) {
+    throw new WorkflowExecutionNotFoundError();
+  }
+
+  return {
+    run: summary,
+    accepted: true,
+    mode: "manual_retry",
+    attemptNumber,
+  };
+}
+
+async function ensureExecutionAttemptScheduled(params: {
+  run: WorkflowRunRow;
+  attemptNumber: number;
+  reason: ExecutionQueueJob["reason"];
+}) {
+  const existing = await getWorkflowRunAttemptRow({
+    runDbId: params.run.id,
+    attemptNumber: params.attemptNumber,
+  });
+  if (existing) {
+    return existing;
+  }
+
+  return createWorkflowRunAttemptRow({
+    runId: params.run.id,
+    organizationId: params.run.organization_id,
+    workflowId: params.run.workflow_id,
+    workflowVersionId: params.run.workflow_version_id,
+    attemptNumber: params.attemptNumber,
+    launchReason: mapQueueReasonToLaunchReason(params.reason),
+    scheduledFor: new Date().toISOString(),
+    backoffSeconds: params.reason === "retry" ? getRetryDelaySeconds(params.attemptNumber - 1) : 0,
+    status: "scheduled",
+  });
+}
+
 export async function processExecutionQueueJob(job: ExecutionQueueJob): Promise<void> {
   const claimedRun = await claimWorkflowRunForExecution(job.runDbId);
   if (!claimedRun) {
     return;
   }
+  const attemptNumber = claimedRun.attempt_count;
+
+  await ensureExecutionAttemptScheduled({
+    run: claimedRun,
+    attemptNumber,
+    reason: job.reason,
+  });
+  await markWorkflowRunAttemptRunning({
+    runDbId: claimedRun.id,
+    attemptNumber,
+  });
 
   const logger = createExecutionLogger(claimedRun);
   const heartbeat = setInterval(() => {
@@ -738,6 +1113,13 @@ export async function processExecutionQueueJob(job: ExecutionQueueJob): Promise<
   try {
     const version = await getWorkflowVersionRowById(claimedRun.workflow_version_id);
     if (!version) {
+      await completeWorkflowRunAttempt({
+        runDbId: claimedRun.id,
+        attemptNumber,
+        status: "failed",
+        failureCode: "missing_workflow_version",
+        failureMessage: "Workflow version binding no longer exists.",
+      });
       await markWorkflowRunFailed({
         runDbId: claimedRun.id,
         failureCode: "missing_workflow_version",
@@ -757,12 +1139,22 @@ export async function processExecutionQueueJob(job: ExecutionQueueJob): Promise<
     });
 
     if (result.kind === "success") {
+      await completeWorkflowRunAttempt({
+        runDbId: claimedRun.id,
+        attemptNumber,
+        status: "success",
+      });
       await markWorkflowRunSuccess(claimedRun.id);
       writeLog(logger, "info", "Workflow run completed successfully", {});
       return;
     }
 
     if (result.kind === "condition_not_met") {
+      await completeWorkflowRunAttempt({
+        runDbId: claimedRun.id,
+        attemptNumber,
+        status: "success",
+      });
       await markWorkflowRunSuccess(claimedRun.id);
       writeLog(
         logger,
@@ -774,6 +1166,13 @@ export async function processExecutionQueueJob(job: ExecutionQueueJob): Promise<
     }
 
     if (result.kind === "cancelled") {
+      await completeWorkflowRunAttempt({
+        runDbId: claimedRun.id,
+        attemptNumber,
+        status: "cancelled",
+        failureCode: "cancelled_by_user",
+        failureMessage: result.failureMessage,
+      });
       await markWorkflowRunCancelledFromWorker({
         runDbId: claimedRun.id,
         failureMessage: result.failureMessage,
@@ -787,15 +1186,37 @@ export async function processExecutionQueueJob(job: ExecutionQueueJob): Promise<
       claimedRun.attempt_count < claimedRun.max_attempts;
 
     if (shouldRetry) {
+      const nextRetryAt = new Date(
+        Date.now() + getRetryDelaySeconds(claimedRun.attempt_count) * 1000,
+      );
+      await completeWorkflowRunAttempt({
+        runDbId: claimedRun.id,
+        attemptNumber,
+        status: "failed",
+        failureCode: result.failureCode,
+        failureMessage: result.failureMessage,
+      });
       const updated = await markWorkflowRunRetrying({
         runDbId: claimedRun.id,
         failureCode: result.failureCode,
         failureMessage: result.failureMessage,
+        nextRetryAt: nextRetryAt.toISOString(),
       });
       if (updated) {
+        await createWorkflowRunAttemptRow({
+          runId: updated.id,
+          organizationId: updated.organization_id,
+          workflowId: updated.workflow_id,
+          workflowVersionId: updated.workflow_version_id,
+          attemptNumber: updated.attempt_count + 1,
+          launchReason: "automatic_retry",
+          scheduledFor: nextRetryAt.toISOString(),
+          backoffSeconds: getRetryDelaySeconds(updated.attempt_count),
+          status: "scheduled",
+        });
         await scheduleExecutionJob({
           job: buildQueueJob(updated, "retry"),
-          availableAt: new Date(Date.now() + getRetryDelaySeconds(updated.attempt_count) * 1000),
+          availableAt: nextRetryAt,
         });
       }
       writeLog(logger, "warn", "Workflow run scheduled for retry", {
@@ -806,6 +1227,22 @@ export async function processExecutionQueueJob(job: ExecutionQueueJob): Promise<
       return;
     }
 
+    await completeWorkflowRunAttempt({
+      runDbId: claimedRun.id,
+      attemptNumber,
+      status: "failed",
+      failureCode: result.failureCode,
+      failureMessage: result.failureMessage,
+    });
+    if (result.kind === "retryable_failure") {
+      await trackRetryExhaustionAlert({
+        organizationId: claimedRun.organization_id,
+        workflowId: claimedRun.workflow_id,
+        runId: claimedRun.run_key,
+        correlationId: claimedRun.correlation_id,
+        failureCode: result.failureCode,
+      }).catch(() => undefined);
+    }
     await markWorkflowRunFailed({
       runDbId: claimedRun.id,
       failureCode: result.failureCode,
@@ -816,6 +1253,14 @@ export async function processExecutionQueueJob(job: ExecutionQueueJob): Promise<
       failureMessage: result.failureMessage,
     });
   } catch (error: unknown) {
+    await completeWorkflowRunAttempt({
+      runDbId: claimedRun.id,
+      attemptNumber,
+      status: "failed",
+      failureCode: "unhandled_execution_error",
+      failureMessage:
+        error instanceof Error ? error.message : "Unhandled execution worker error.",
+    }).catch(() => undefined);
     await markWorkflowRunFailed({
       runDbId: claimedRun.id,
       failureCode: "unhandled_execution_error",

@@ -48,7 +48,7 @@ export async function GET(req: Request, { params }: RouteContext) {
       );
     }
 
-    const { logs, total } = await listAuditLogs(
+    const { logs, total, summary, availableActions } = await listAuditLogs(
       access.context.organization.id,
       parsedFilters.data,
     );
@@ -57,6 +57,8 @@ export async function GET(req: Request, { params }: RouteContext) {
       {
         logs,
         total,
+        summary,
+        availableActions,
         page: parsedFilters.data.page,
         pageSize: parsedFilters.data.pageSize,
       },

@@ -7,7 +7,12 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "npm run test:security && npm run test:operations",
+    "test:security": "tsx --test tests/security/redaction.test.ts tests/security/webhook-hardening.test.ts tests/security/isolation-regression.test.ts",
+    "test:operations": "tsx --test tests/operations/alert-thresholds.test.ts tests/operations/audit-coverage.test.ts",
     "db:apply-auth-schema": "node scripts/apply-auth-schema.mjs",
+    "retention:prune": "node scripts/prune-retention.mjs",
+    "retention:prune:dry-run": "node scripts/prune-retention.mjs --dry-run",
     "worker:dev": "tsx watch worker/main.ts",
     "worker:start": "tsx worker/main.ts",
     "worker:once": "tsx worker/main.ts --once"

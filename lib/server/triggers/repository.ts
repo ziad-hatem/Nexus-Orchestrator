@@ -20,6 +20,9 @@ type WorkflowVersionLookupRow = {
   version_number: number;
 };
 
+const TRIGGER_BINDING_SELECT =
+  "id, organization_id, workflow_id, workflow_version_id, source_type, match_key, config_snapshot, secret_hash, secret_last_four, secret_rotated_at, secret_last_used_at, is_active, created_by, updated_by, created_at, updated_at";
+
 function getClient() {
   return createSupabaseAdminClient();
 }
@@ -47,14 +50,14 @@ export async function createTriggerBindingRow(params: {
       config_snapshot: params.configSnapshot,
       secret_hash: params.secretHash ?? null,
       secret_last_four: params.secretLastFour ?? null,
+      secret_rotated_at: params.secretHash ? new Date().toISOString() : null,
+      secret_last_used_at: null,
       is_active: true,
       created_by: params.userId,
       updated_by: params.userId,
       updated_at: new Date().toISOString(),
     })
-    .select(
-      "id, organization_id, workflow_id, workflow_version_id, source_type, match_key, config_snapshot, secret_hash, secret_last_four, is_active, created_by, updated_by, created_at, updated_at",
-    )
+    .select(TRIGGER_BINDING_SELECT)
     .single<TriggerBindingRow>();
 
   if (error || !data) {
@@ -104,9 +107,7 @@ export async function getActiveTriggerBindingByWorkflowDbId(
   const supabase = getClient();
   const { data, error } = await supabase
     .from("workflow_trigger_bindings")
-    .select(
-      "id, organization_id, workflow_id, workflow_version_id, source_type, match_key, config_snapshot, secret_hash, secret_last_four, is_active, created_by, updated_by, created_at, updated_at",
-    )
+    .select(TRIGGER_BINDING_SELECT)
     .eq("workflow_id", workflowDbId)
     .eq("is_active", true)
     .maybeSingle<TriggerBindingRow>();
@@ -124,9 +125,7 @@ export async function getActiveWebhookBindingByMatchKey(
   const supabase = getClient();
   const { data, error } = await supabase
     .from("workflow_trigger_bindings")
-    .select(
-      "id, organization_id, workflow_id, workflow_version_id, source_type, match_key, config_snapshot, secret_hash, secret_last_four, is_active, created_by, updated_by, created_at, updated_at",
-    )
+    .select(TRIGGER_BINDING_SELECT)
     .eq("source_type", "webhook")
     .eq("match_key", matchKey)
     .eq("is_active", true)
@@ -145,9 +144,7 @@ export async function getActiveManualBindingByWorkflowDbId(
   const supabase = getClient();
   const { data, error } = await supabase
     .from("workflow_trigger_bindings")
-    .select(
-      "id, organization_id, workflow_id, workflow_version_id, source_type, match_key, config_snapshot, secret_hash, secret_last_four, is_active, created_by, updated_by, created_at, updated_at",
-    )
+    .select(TRIGGER_BINDING_SELECT)
     .eq("workflow_id", workflowDbId)
     .eq("source_type", "manual")
     .eq("is_active", true)
@@ -166,9 +163,7 @@ export async function listActiveInternalEventBindings(
   const supabase = getClient();
   const { data, error } = await supabase
     .from("workflow_trigger_bindings")
-    .select(
-      "id, organization_id, workflow_id, workflow_version_id, source_type, match_key, config_snapshot, secret_hash, secret_last_four, is_active, created_by, updated_by, created_at, updated_at",
-    )
+    .select(TRIGGER_BINDING_SELECT)
     .eq("source_type", "internal_event")
     .eq("match_key", eventKey)
     .eq("is_active", true)
@@ -193,13 +188,13 @@ export async function updateTriggerBindingSecret(params: {
     .update({
       secret_hash: params.secretHash,
       secret_last_four: params.secretLastFour,
+      secret_rotated_at: new Date().toISOString(),
+      secret_last_used_at: null,
       updated_by: params.userId,
       updated_at: new Date().toISOString(),
     })
     .eq("id", params.bindingId)
-    .select(
-      "id, organization_id, workflow_id, workflow_version_id, source_type, match_key, config_snapshot, secret_hash, secret_last_four, is_active, created_by, updated_by, created_at, updated_at",
-    )
+    .select(TRIGGER_BINDING_SELECT)
     .single<TriggerBindingRow>();
 
   if (error || !data) {
@@ -209,6 +204,21 @@ export async function updateTriggerBindingSecret(params: {
   }
 
   return data;
+}
+
+export async function markTriggerBindingSecretUsed(bindingId: string): Promise<void> {
+  const supabase = getClient();
+  const { error } = await supabase
+    .from("workflow_trigger_bindings")
+    .update({
+      secret_last_used_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", bindingId);
+
+  if (error) {
+    throw new Error(`Failed to update webhook API key usage: ${error.message}`);
+  }
 }
 
 export async function createWorkflowRunRow(params: {
@@ -244,7 +254,7 @@ export async function createWorkflowRunRow(params: {
       updated_at: new Date().toISOString(),
     })
     .select(
-      "id, organization_id, workflow_id, workflow_version_id, binding_id, run_key, correlation_id, status, trigger_source, source_context, payload, idempotency_key, created_by_event_id, attempt_count, max_attempts, started_at, completed_at, cancel_requested_at, cancelled_at, last_heartbeat_at, failure_code, failure_message, created_at, updated_at",
+      "id, organization_id, workflow_id, workflow_version_id, binding_id, run_key, correlation_id, status, trigger_source, source_context, payload, idempotency_key, created_by_event_id, attempt_count, max_attempts, started_at, completed_at, cancel_requested_at, cancelled_at, last_heartbeat_at, next_retry_at, last_retry_at, failure_code, failure_message, created_at, updated_at",
     )
     .single<WorkflowRunRow>();
 

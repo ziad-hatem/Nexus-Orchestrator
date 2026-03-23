@@ -36,8 +36,10 @@ export default async function AuditPage({
         page: 1,
         pageSize: 20,
       };
-  const { logs, total } = await listAuditLogs(context.organization.id, filters);
-  const availableActions = Array.from(new Set(logs.map((log) => log.action))).sort();
+  const { logs, total, summary, availableActions } = await listAuditLogs(
+    context.organization.id,
+    filters,
+  );
 
   return (
     <>
@@ -51,6 +53,7 @@ export default async function AuditPage({
           action: filters.action,
         }}
         availableActions={availableActions}
+        summary={summary}
       />
       <AuditLogTable
         orgSlug={orgSlug}
@@ -63,6 +66,7 @@ export default async function AuditPage({
           action: filters.action,
         }}
         availableActions={availableActions}
+        summary={summary}
       />
     </>
   );

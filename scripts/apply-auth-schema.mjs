@@ -16,6 +16,9 @@ const schemaFiles = [
   "db/phase-two-workflows-schema.sql",
   "db/phase-three-trigger-ingestion.sql",
   "db/phase-four-execution-engine.sql",
+  "db/phase-six-action-layer.sql",
+  "db/phase-seven-observability-recovery.sql",
+  "db/phase-eight-hardening.sql",
   "db/mfa-email-schema.sql",
   "db/passkeys-schema.sql",
 ];

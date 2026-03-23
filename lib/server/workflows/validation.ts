@@ -8,7 +8,14 @@ import {
   type WorkflowDraftDocument,
 } from "@/lib/server/workflows/types";
 import { isValidConditionResolverPath } from "@/lib/server/conditions/resolver";
-import { normalizeWebhookPath } from "@/lib/server/validation";
+import {
+  hasRuntimeTemplateTokens,
+  isIsoDateLike,
+  isSafeWorkflowRecordFieldKey,
+  normalizeEmail,
+  normalizeWebhookPath,
+} from "@/lib/server/validation";
+import { validateTemplateString } from "@/lib/server/actions/templating";
 
 function pushIssue(
   issues: ValidationIssue[],
@@ -27,6 +34,25 @@ function toStringValue(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function pushTemplateIssues(params: {
+  issues: ValidationIssue[];
+  actionId: string;
+  path: string;
+  code: string;
+  value: string;
+  invalidMessage: string;
+}): void {
+  const issues = validateTemplateString(params.value);
+  for (const issue of issues) {
+    pushIssue(params.issues, {
+      path: `config.actions.${params.actionId}.${params.path}`,
+      code: params.code,
+      message: params.invalidMessage || issue.message,
+      severity: "error",
+    });
+  }
+}
+
 function validateActionConfig(
   action: WorkflowActionConfig,
   issues: ValidationIssue[],
@@ -42,118 +68,401 @@ function validateActionConfig(
     });
   }
 
-  if (action.type === "legacy_custom") {
+  if (action.type === "legacy_custom" || action.legacyIssue) {
     pushIssue(issues, {
       path: `config.actions.${action.id}.type`,
       code: "legacy_action_type",
       message:
-        "Legacy actions must be converted to Notify, Webhook request, or Ticket update before publishing.",
+        action.legacyIssue ??
+        "Legacy actions must be converted to Send webhook, Send email, Create task, or Update record before publishing.",
       severity: "error",
     });
     return;
   }
 
   switch (action.type) {
-    case "notify": {
-      const channel = toStringValue(config.channel);
-      const recipient = toStringValue(config.recipient);
-      const template = toStringValue(config.template);
-      const message = toStringValue(config.message);
-
-      if (!["email", "sms", "in_app"].includes(channel)) {
-        pushIssue(issues, {
-          path: `config.actions.${action.id}.config.channel`,
-          code: "invalid_notify_channel",
-          message: "Notify actions must use email, sms, or in_app.",
-          severity: "error",
-        });
-      }
-
-      if (!recipient) {
-        pushIssue(issues, {
-          path: `config.actions.${action.id}.config.recipient`,
-          code: "missing_notify_recipient",
-          message: "Notify actions require a recipient.",
-          severity: "error",
-        });
-      }
-
-      if (!template && !message) {
-        pushIssue(issues, {
-          path: `config.actions.${action.id}.config.message`,
-          code: "missing_notify_content",
-          message: "Notify actions require either a template or a message body.",
-          severity: "error",
-        });
-      }
-
-      break;
-    }
-    case "webhook_request": {
+    case "send_webhook": {
       const url = toStringValue(config.url);
       const method = toStringValue(config.method) || "POST";
-      const payloadTemplate = toStringValue(config.payloadTemplate);
+      const headers =
+        config.headers && typeof config.headers === "object" && !Array.isArray(config.headers)
+          ? (config.headers as Record<string, unknown>)
+          : {};
+      const body = typeof config.body === "string" ? config.body : "";
 
       if (!url) {
         pushIssue(issues, {
           path: `config.actions.${action.id}.config.url`,
-          code: "missing_webhook_request_url",
-          message: "Webhook request actions require a destination URL.",
+          code: "missing_send_webhook_url",
+          message: "Send webhook actions require a destination URL.",
           severity: "error",
         });
       } else {
-        try {
-          new URL(url);
-        } catch {
-          pushIssue(issues, {
-            path: `config.actions.${action.id}.config.url`,
-            code: "invalid_webhook_request_url",
-            message: "Webhook request actions must use a valid absolute URL.",
-            severity: "error",
-          });
+        pushTemplateIssues({
+          issues,
+          actionId: action.id,
+          path: "config.url",
+          code: "invalid_send_webhook_url_template",
+          value: url,
+          invalidMessage:
+            "Webhook URL templates may only use {{ payload.* }} and {{ context.* }} tokens.",
+        });
+
+        if (!hasRuntimeTemplateTokens(url)) {
+          try {
+            new URL(url);
+          } catch {
+            pushIssue(issues, {
+              path: `config.actions.${action.id}.config.url`,
+              code: "invalid_send_webhook_url",
+              message: "Send webhook actions must use a valid absolute URL.",
+              severity: "error",
+            });
+          }
         }
       }
 
       if (!["POST", "PUT", "PATCH"].includes(method)) {
         pushIssue(issues, {
           path: `config.actions.${action.id}.config.method`,
-          code: "invalid_webhook_request_method",
-          message: "Webhook request actions support POST, PUT, or PATCH.",
+          code: "invalid_send_webhook_method",
+          message: "Send webhook actions support POST, PUT, or PATCH.",
           severity: "error",
         });
       }
 
-      if (!payloadTemplate) {
-        pushIssue(issues, {
-          path: `config.actions.${action.id}.config.payloadTemplate`,
-          code: "missing_webhook_request_payload",
-          message: "Webhook request actions require a payload template.",
-          severity: "error",
+      for (const [headerName, headerValue] of Object.entries(headers)) {
+        if (!headerName.trim()) {
+          pushIssue(issues, {
+            path: `config.actions.${action.id}.config.headers`,
+            code: "invalid_send_webhook_header_key",
+            message: "Webhook header names cannot be empty.",
+            severity: "error",
+          });
+          continue;
+        }
+
+        pushTemplateIssues({
+          issues,
+          actionId: action.id,
+          path: `config.headers.${headerName}`,
+          code: "invalid_send_webhook_header_template",
+          value: typeof headerValue === "string" ? headerValue : JSON.stringify(headerValue),
+          invalidMessage:
+            "Webhook header templates may only use {{ payload.* }} and {{ context.* }} tokens.",
+        });
+      }
+
+      if (body) {
+        pushTemplateIssues({
+          issues,
+          actionId: action.id,
+          path: "config.body",
+          code: "invalid_send_webhook_body_template",
+          value: body,
+          invalidMessage:
+            "Webhook body templates may only use {{ payload.* }} and {{ context.* }} tokens.",
         });
       }
 
       break;
     }
-    case "ticket_update": {
-      const field = toStringValue(config.field);
-      const value = toStringValue(config.value);
+    case "send_email": {
+      const to = toStringValue(config.to);
+      const subject = typeof config.subject === "string" ? config.subject : "";
+      const body = typeof config.body === "string" ? config.body : "";
+      const replyTo = toStringValue(config.replyTo);
 
-      if (!["status", "priority", "assignee"].includes(field)) {
+      if (!to) {
+        pushIssue(issues, {
+          path: `config.actions.${action.id}.config.to`,
+          code: "missing_send_email_to",
+          message: "Send email actions require a recipient address.",
+          severity: "error",
+        });
+      } else {
+        pushTemplateIssues({
+          issues,
+          actionId: action.id,
+          path: "config.to",
+          code: "invalid_send_email_to_template",
+          value: to,
+          invalidMessage:
+            "Email recipient templates may only use {{ payload.* }} and {{ context.* }} tokens.",
+        });
+
+        if (!hasRuntimeTemplateTokens(to) && !normalizeEmail(to)) {
+          pushIssue(issues, {
+            path: `config.actions.${action.id}.config.to`,
+            code: "invalid_send_email_to",
+            message: "Send email actions must use a valid recipient email address.",
+            severity: "error",
+          });
+        }
+      }
+
+      if (!subject.trim()) {
+        pushIssue(issues, {
+          path: `config.actions.${action.id}.config.subject`,
+          code: "missing_send_email_subject",
+          message: "Send email actions require a subject.",
+          severity: "error",
+        });
+      } else {
+        pushTemplateIssues({
+          issues,
+          actionId: action.id,
+          path: "config.subject",
+          code: "invalid_send_email_subject_template",
+          value: subject,
+          invalidMessage:
+            "Email subject templates may only use {{ payload.* }} and {{ context.* }} tokens.",
+        });
+      }
+
+      if (!body.trim()) {
+        pushIssue(issues, {
+          path: `config.actions.${action.id}.config.body`,
+          code: "missing_send_email_body",
+          message: "Send email actions require a body.",
+          severity: "error",
+        });
+      } else {
+        pushTemplateIssues({
+          issues,
+          actionId: action.id,
+          path: "config.body",
+          code: "invalid_send_email_body_template",
+          value: body,
+          invalidMessage:
+            "Email body templates may only use {{ payload.* }} and {{ context.* }} tokens.",
+        });
+      }
+
+      if (replyTo) {
+        pushTemplateIssues({
+          issues,
+          actionId: action.id,
+          path: "config.replyTo",
+          code: "invalid_send_email_reply_to_template",
+          value: replyTo,
+          invalidMessage:
+            "Reply-to templates may only use {{ payload.* }} and {{ context.* }} tokens.",
+        });
+
+        if (!hasRuntimeTemplateTokens(replyTo) && !normalizeEmail(replyTo)) {
+          pushIssue(issues, {
+            path: `config.actions.${action.id}.config.replyTo`,
+            code: "invalid_send_email_reply_to",
+            message: "Reply-to must be a valid email address when it is static.",
+            severity: "error",
+          });
+        }
+      }
+
+      break;
+    }
+    case "create_task": {
+      const title = typeof config.title === "string" ? config.title : "";
+      const description = typeof config.description === "string" ? config.description : "";
+      const assigneeEmail = toStringValue(config.assigneeEmail);
+      const dueAt = toStringValue(config.dueAt);
+
+      if (!title.trim()) {
+        pushIssue(issues, {
+          path: `config.actions.${action.id}.config.title`,
+          code: "missing_create_task_title",
+          message: "Create task actions require a title.",
+          severity: "error",
+        });
+      } else {
+        pushTemplateIssues({
+          issues,
+          actionId: action.id,
+          path: "config.title",
+          code: "invalid_create_task_title_template",
+          value: title,
+          invalidMessage:
+            "Task title templates may only use {{ payload.* }} and {{ context.* }} tokens.",
+        });
+      }
+
+      if (description) {
+        pushTemplateIssues({
+          issues,
+          actionId: action.id,
+          path: "config.description",
+          code: "invalid_create_task_description_template",
+          value: description,
+          invalidMessage:
+            "Task description templates may only use {{ payload.* }} and {{ context.* }} tokens.",
+        });
+      }
+
+      if (assigneeEmail) {
+        pushTemplateIssues({
+          issues,
+          actionId: action.id,
+          path: "config.assigneeEmail",
+          code: "invalid_create_task_assignee_template",
+          value: assigneeEmail,
+          invalidMessage:
+            "Task assignee templates may only use {{ payload.* }} and {{ context.* }} tokens.",
+        });
+
+        if (
+          !hasRuntimeTemplateTokens(assigneeEmail) &&
+          !normalizeEmail(assigneeEmail)
+        ) {
+          pushIssue(issues, {
+            path: `config.actions.${action.id}.config.assigneeEmail`,
+            code: "invalid_create_task_assignee",
+            message: "Task assignee must be a valid email address when it is static.",
+            severity: "error",
+          });
+        }
+      }
+
+      if (dueAt) {
+        pushTemplateIssues({
+          issues,
+          actionId: action.id,
+          path: "config.dueAt",
+          code: "invalid_create_task_due_at_template",
+          value: dueAt,
+          invalidMessage:
+            "Task due date templates may only use {{ payload.* }} and {{ context.* }} tokens.",
+        });
+
+        if (!hasRuntimeTemplateTokens(dueAt) && !isIsoDateLike(dueAt)) {
+          pushIssue(issues, {
+            path: `config.actions.${action.id}.config.dueAt`,
+            code: "invalid_create_task_due_at",
+            message: "Task due date must be a valid date or datetime when it is static.",
+            severity: "error",
+          });
+        }
+      }
+
+      break;
+    }
+    case "update_record_field": {
+      const recordType = typeof config.recordType === "string" ? config.recordType : "";
+      const recordKey = typeof config.recordKey === "string" ? config.recordKey : "";
+      const field = typeof config.field === "string" ? config.field : "";
+      const valueType = toStringValue(config.valueType) || "string";
+      const valueTemplate =
+        typeof config.valueTemplate === "string" ? config.valueTemplate : "";
+
+      if (!recordType.trim()) {
+        pushIssue(issues, {
+          path: `config.actions.${action.id}.config.recordType`,
+          code: "missing_update_record_type",
+          message: "Update record actions require a record type.",
+          severity: "error",
+        });
+      } else {
+        pushTemplateIssues({
+          issues,
+          actionId: action.id,
+          path: "config.recordType",
+          code: "invalid_update_record_type_template",
+          value: recordType,
+          invalidMessage:
+            "Record type templates may only use {{ payload.* }} and {{ context.* }} tokens.",
+        });
+      }
+
+      if (!recordKey.trim()) {
+        pushIssue(issues, {
+          path: `config.actions.${action.id}.config.recordKey`,
+          code: "missing_update_record_key",
+          message: "Update record actions require a record key.",
+          severity: "error",
+        });
+      } else {
+        pushTemplateIssues({
+          issues,
+          actionId: action.id,
+          path: "config.recordKey",
+          code: "invalid_update_record_key_template",
+          value: recordKey,
+          invalidMessage:
+            "Record key templates may only use {{ payload.* }} and {{ context.* }} tokens.",
+        });
+      }
+
+      if (!field.trim()) {
         pushIssue(issues, {
           path: `config.actions.${action.id}.config.field`,
-          code: "invalid_ticket_update_field",
-          message: "Ticket update actions must change status, priority, or assignee.",
+          code: "missing_update_record_field",
+          message: "Update record actions require a field name.",
+          severity: "error",
+        });
+      } else {
+        pushTemplateIssues({
+          issues,
+          actionId: action.id,
+          path: "config.field",
+          code: "invalid_update_record_field_template",
+          value: field,
+          invalidMessage:
+            "Record field keys must stay static safe identifiers and may not use templating.",
+        });
+
+        if (hasRuntimeTemplateTokens(field) || !isSafeWorkflowRecordFieldKey(field)) {
+          pushIssue(issues, {
+            path: `config.actions.${action.id}.config.field`,
+            code: "unsafe_update_record_field",
+            message:
+              "Update record actions must use a static safe field key containing only letters, numbers, underscores, or dashes.",
+            severity: "error",
+          });
+        }
+      }
+
+      if (!["string", "number", "boolean", "null", "json"].includes(valueType)) {
+        pushIssue(issues, {
+          path: `config.actions.${action.id}.config.valueType`,
+          code: "invalid_update_record_value_type",
+          message: "Update record actions must use a supported value type.",
           severity: "error",
         });
       }
 
-      if (!value) {
+      if (valueType !== "null" && !valueTemplate.trim()) {
         pushIssue(issues, {
-          path: `config.actions.${action.id}.config.value`,
-          code: "missing_ticket_update_value",
-          message: "Ticket update actions require a target value.",
+          path: `config.actions.${action.id}.config.valueTemplate`,
+          code: "missing_update_record_value_template",
+          message: "Update record actions require a value template unless the type is null.",
           severity: "error",
         });
+      }
+
+      if (valueTemplate) {
+        pushTemplateIssues({
+          issues,
+          actionId: action.id,
+          path: "config.valueTemplate",
+          code: "invalid_update_record_value_template",
+          value: valueTemplate,
+          invalidMessage:
+            "Record value templates may only use {{ payload.* }} and {{ context.* }} tokens.",
+        });
+
+        if (!hasRuntimeTemplateTokens(valueTemplate) && valueType === "json") {
+          try {
+            JSON.parse(valueTemplate);
+          } catch {
+            pushIssue(issues, {
+              path: `config.actions.${action.id}.config.valueTemplate`,
+              code: "invalid_update_record_json_value",
+              message:
+                "JSON record values must be valid JSON when the template is static.",
+              severity: "error",
+            });
+          }
+        }
       }
 
       break;

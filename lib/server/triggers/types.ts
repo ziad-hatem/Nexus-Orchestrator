@@ -15,6 +15,8 @@ export type TriggerBindingRow = {
   config_snapshot: unknown;
   secret_hash: string | null;
   secret_last_four: string | null;
+  secret_rotated_at: string | null;
+  secret_last_used_at: string | null;
   is_active: boolean;
   created_by: string;
   updated_by: string;
@@ -65,7 +67,11 @@ export type WebhookSecretMaterial = {
 
 export type WebhookApiKeyVerificationResult = {
   ok: boolean;
-  reason: "verified" | "missing_api_key" | "invalid_api_key";
+  reason:
+    | "verified"
+    | "missing_api_key"
+    | "invalid_api_key"
+    | "invalid_api_key_shape";
 };
 
 export type TriggerRouteSource = "manual" | "webhook" | "internal_event";

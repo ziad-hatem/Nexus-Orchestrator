@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import pino, { type Logger } from "pino";
 import { getOptionalEnv } from "@/lib/env";
 import { captureServerLog } from "@/lib/observability/error-tracking";
+import { redactSensitiveData } from "@/lib/observability/redaction";
 
 export type LogLevel = "info" | "warn" | "error";
 
@@ -11,11 +12,15 @@ export type LogContext = {
   method?: string | null;
   path?: string | null;
   userId?: string | null;
-  email?: string | null;
   organizationId?: string | null;
   organizationSlug?: string | null;
   membershipId?: string | null;
   role?: string | null;
+  workflowId?: string | null;
+  runId?: string | null;
+  correlationId?: string | null;
+  alertKey?: string | null;
+  securityEvent?: string | null;
   [key: string]: unknown;
 };
 
@@ -49,11 +54,11 @@ export function serializeError(error: unknown): Record<string, unknown> | undefi
     return undefined;
   }
 
-  return {
+  return redactSensitiveData({
     name: error.name,
     message: error.message,
     stack: error.stack,
-  };
+  });
 }
 
 export const appLogger = pino({
@@ -105,9 +110,9 @@ export function writeLog(
   message: string,
   context: Record<string, unknown> = {},
 ): void {
-  const payload = Object.fromEntries(
+  const payload = redactSensitiveData(Object.fromEntries(
     Object.entries(context).filter(([, value]) => typeof value !== "undefined"),
-  );
+  ));
 
   if (level === "info") {
     logger.info(payload, message);

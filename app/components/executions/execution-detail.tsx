@@ -3,6 +3,7 @@ import { Activity, ArrowRight, Clock3, GitCommitHorizontal, PlayCircle } from "l
 import { Button } from "@/app/components/ui/button";
 import { CancelRunDialog } from "@/app/components/executions/cancel-run-dialog";
 import { ExecutionStepTimeline } from "@/app/components/executions/execution-step-timeline";
+import { RetryRunDialog } from "@/app/components/executions/retry-run-dialog";
 import { WorkflowToolbar } from "@/app/components/workflows/workflow-toolbar";
 import type { WorkflowRunDetail } from "@/lib/server/workflows/types";
 
@@ -10,12 +11,14 @@ type ExecutionDetailProps = {
   orgSlug: string;
   detail: WorkflowRunDetail;
   canCancelRuns: boolean;
+  canRetryRuns: boolean;
 };
 
 export function ExecutionDetail({
   orgSlug,
   detail,
   canCancelRuns,
+  canRetryRuns,
 }: ExecutionDetailProps) {
   const isTerminal = ["success", "failed", "cancelled"].includes(detail.status);
 
@@ -42,6 +45,9 @@ export function ExecutionDetail({
             </Button>
             {canCancelRuns && !isTerminal ? (
               <CancelRunDialog orgSlug={orgSlug} runId={detail.runId} />
+            ) : null}
+            {canRetryRuns && detail.retryEligible ? (
+              <RetryRunDialog orgSlug={orgSlug} runId={detail.runId} />
             ) : null}
           </>
         }
@@ -72,7 +78,65 @@ export function ExecutionDetail({
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(22rem,0.9fr)]">
         <div className="space-y-6">
-          <ExecutionStepTimeline steps={detail.steps} />
+          <section className="glass-panel rounded-[1.75rem] p-6 sm:p-8">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="label-caps">Retry policy</p>
+                <h2 className="mt-2 text-2xl font-bold tracking-[-0.03em] text-[var(--on-surface)]">
+                  Recovery timeline
+                </h2>
+              </div>
+              <div className="text-right text-sm text-[var(--on-surface-variant)]">
+                <p>Max attempts {detail.maxAttempts}</p>
+                <p className="mt-1">
+                  Next retry {detail.nextRetryAt ?? "Not scheduled"}
+                </p>
+              </div>
+            </div>
+            <div className="mt-5 grid gap-3 md:grid-cols-2">
+              {detail.attempts.length > 0 ? (
+                detail.attempts.map((attempt) => (
+                  <div
+                    key={`attempt:${attempt.attemptNumber}`}
+                    className="rounded-[1.35rem] bg-[var(--surface-container-low)] p-4"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-[var(--on-surface)]">
+                          Attempt {attempt.attemptNumber}
+                        </p>
+                        <p className="mt-1 text-xs uppercase tracking-[0.14em] text-[var(--on-surface-variant)]">
+                          {attempt.launchReason.replaceAll("_", " ")}
+                        </p>
+                      </div>
+                      <span className="rounded-full bg-[var(--surface-container-high)] px-3 py-1 text-xs font-semibold capitalize text-[var(--on-surface)]">
+                        {attempt.status}
+                      </span>
+                    </div>
+                    <div className="mt-3 space-y-1 text-sm text-[var(--on-surface-variant)]">
+                      <p>Scheduled {attempt.scheduledFor ?? "Unknown"}</p>
+                      <p>Started {attempt.startedAt ?? "Not started"}</p>
+                      <p>Completed {attempt.completedAt ?? "Still active"}</p>
+                      <p>Backoff {attempt.backoffSeconds ?? 0}s</p>
+                      {attempt.requestedBy ? (
+                        <p>
+                          Requested by {attempt.requestedBy.name ?? attempt.requestedBy.email ?? attempt.requestedBy.id}
+                        </p>
+                      ) : null}
+                      {attempt.requestNote ? <p>Note: {attempt.requestNote}</p> : null}
+                      {attempt.failureCode ? <p>Failure code: {attempt.failureCode}</p> : null}
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-[1.35rem] bg-[var(--surface-container-low)] p-4 text-sm text-[var(--on-surface-variant)]">
+                  No retry history is available for this run yet.
+                </div>
+              )}
+            </div>
+          </section>
+
+          <ExecutionStepTimeline steps={detail.steps} attempts={detail.attempts} />
 
           <section className="glass-panel rounded-[1.75rem] p-6 sm:p-8">
             <div className="flex items-center gap-3">
@@ -86,6 +150,9 @@ export function ExecutionDetail({
             </div>
 
             <div className="mt-6 rounded-[1.5rem] bg-[#0b1c30] p-5">
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-blue-100/70">
+                Sensitive values are redacted in operator-facing views
+              </p>
               <pre className="overflow-x-auto text-xs text-blue-100">
                 {JSON.stringify(detail.payload, null, 2)}
               </pre>
@@ -115,6 +182,14 @@ export function ExecutionDetail({
                 <p className="mt-2 text-sm font-semibold text-[var(--on-surface)]">{detail.startedAt ?? "Waiting for worker"}</p>
               </div>
               <div className="rounded-2xl bg-[var(--surface-container-low)] p-4">
+                <p className="label-caps">Last retry</p>
+                <p className="mt-2 text-sm font-semibold text-[var(--on-surface)]">{detail.lastRetryAt ?? "Not retried"}</p>
+              </div>
+              <div className="rounded-2xl bg-[var(--surface-container-low)] p-4">
+                <p className="label-caps">Next retry</p>
+                <p className="mt-2 text-sm font-semibold text-[var(--on-surface)]">{detail.nextRetryAt ?? "Not scheduled"}</p>
+              </div>
+              <div className="rounded-2xl bg-[var(--surface-container-low)] p-4">
                 <p className="label-caps">Completed</p>
                 <p className="mt-2 text-sm font-semibold text-[var(--on-surface)]">{detail.completedAt ?? "Still active"}</p>
               </div>
@@ -128,6 +203,9 @@ export function ExecutionDetail({
           <section className="glass-panel rounded-[1.75rem] p-6">
             <p className="label-caps">Source context</p>
             <div className="mt-5 rounded-[1.5rem] bg-[var(--surface-container-low)] p-5">
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--on-surface-variant)]">
+                Sensitive values are redacted in operator-facing views
+              </p>
               <pre className="overflow-x-auto text-xs text-[var(--on-surface)]">
                 {JSON.stringify(detail.sourceContext, null, 2)}
               </pre>

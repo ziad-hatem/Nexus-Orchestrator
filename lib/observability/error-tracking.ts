@@ -1,4 +1,8 @@
 import * as Sentry from "@sentry/nextjs";
+import {
+  redactRecord,
+  redactSensitiveData,
+} from "@/lib/observability/redaction";
 
 export type MonitoringContext = {
   requestId?: string | null;
@@ -6,11 +10,15 @@ export type MonitoringContext = {
   method?: string | null;
   path?: string | null;
   userId?: string | null;
-  email?: string | null;
   organizationId?: string | null;
   organizationSlug?: string | null;
   membershipId?: string | null;
   role?: string | null;
+  workflowId?: string | null;
+  runId?: string | null;
+  correlationId?: string | null;
+  alertKey?: string | null;
+  securityEvent?: string | null;
   [key: string]: unknown;
 };
 
@@ -39,10 +47,9 @@ function applyScopeContext(
     return;
   }
 
-  if (context.userId || context.email) {
+  if (context.userId) {
     scope.setUser({
       id: context.userId ?? undefined,
-      email: context.email ?? undefined,
     });
   }
 
@@ -52,6 +59,11 @@ function applyScopeContext(
     ["method", context.method],
     ["organization_slug", context.organizationSlug],
     ["role", context.role],
+    ["workflow_id", context.workflowId],
+    ["run_id", context.runId],
+    ["correlation_id", context.correlationId],
+    ["alert_key", context.alertKey],
+    ["security_event", context.securityEvent],
   ] satisfies Array<[string, unknown]>;
 
   for (const [key, value] of tagEntries) {
@@ -68,7 +80,7 @@ function applyScopeContext(
   };
 
   if (Object.values(requestContext).some(Boolean)) {
-    scope.setContext("request", requestContext);
+    scope.setContext("request", redactRecord(requestContext));
   }
 
   const organizationContext = {
@@ -79,7 +91,19 @@ function applyScopeContext(
   };
 
   if (Object.values(organizationContext).some(Boolean)) {
-    scope.setContext("organization", organizationContext);
+    scope.setContext("organization", redactRecord(organizationContext));
+  }
+
+  const executionContext = {
+    workflowId: context.workflowId ?? undefined,
+    runId: context.runId ?? undefined,
+    correlationId: context.correlationId ?? undefined,
+    alertKey: context.alertKey ?? undefined,
+    securityEvent: context.securityEvent ?? undefined,
+  };
+
+  if (Object.values(executionContext).some(Boolean)) {
+    scope.setContext("execution", redactRecord(executionContext));
   }
 
   const reservedKeys = new Set([
@@ -88,16 +112,20 @@ function applyScopeContext(
     "method",
     "path",
     "userId",
-    "email",
     "organizationId",
     "organizationSlug",
     "membershipId",
     "role",
+    "workflowId",
+    "runId",
+    "correlationId",
+    "alertKey",
+    "securityEvent",
   ]);
 
   for (const [key, value] of Object.entries(context)) {
     if (!reservedKeys.has(key) && typeof value !== "undefined") {
-      scope.setExtra(key, value);
+      scope.setExtra(key, redactSensitiveData(value));
     }
   }
 }
@@ -107,10 +135,9 @@ export function applyMonitoringContext(context?: MonitoringContext): void {
     return;
   }
 
-  if (context.userId || context.email) {
+  if (context.userId) {
     Sentry.setUser({
       id: context.userId ?? undefined,
-      email: context.email ?? undefined,
     });
   }
 
@@ -120,6 +147,11 @@ export function applyMonitoringContext(context?: MonitoringContext): void {
     ["method", context.method],
     ["organization_slug", context.organizationSlug],
     ["role", context.role],
+    ["workflow_id", context.workflowId],
+    ["run_id", context.runId],
+    ["correlation_id", context.correlationId],
+    ["alert_key", context.alertKey],
+    ["security_event", context.securityEvent],
   ] satisfies Array<[string, unknown]>;
 
   for (const [key, value] of tagEntries) {
@@ -136,7 +168,19 @@ export function applyMonitoringContext(context?: MonitoringContext): void {
   };
 
   if (Object.values(organizationContext).some(Boolean)) {
-    Sentry.setContext("organization", organizationContext);
+    Sentry.setContext("organization", redactRecord(organizationContext));
+  }
+
+  const executionContext = {
+    workflowId: context.workflowId ?? undefined,
+    runId: context.runId ?? undefined,
+    correlationId: context.correlationId ?? undefined,
+    alertKey: context.alertKey ?? undefined,
+    securityEvent: context.securityEvent ?? undefined,
+  };
+
+  if (Object.values(executionContext).some(Boolean)) {
+    Sentry.setContext("execution", redactRecord(executionContext));
   }
 }
 
@@ -166,7 +210,7 @@ export function captureServerException(
     if (options?.extras) {
       for (const [key, value] of Object.entries(options.extras)) {
         if (typeof value !== "undefined") {
-          scope.setExtra(key, value);
+          scope.setExtra(key, redactSensitiveData(value));
         }
       }
     }
@@ -180,15 +224,49 @@ export function captureServerLog(
   message: string,
   attributes?: Record<string, unknown>,
 ): void {
+  const payload = attributes ? redactRecord(attributes) : undefined;
+
   if (level === "info") {
-    Sentry.logger.info(message, attributes);
+    Sentry.logger.info(message, payload);
     return;
   }
 
   if (level === "warn") {
-    Sentry.logger.warn(message, attributes);
+    Sentry.logger.warn(message, payload);
     return;
   }
 
-  Sentry.logger.error(message, attributes);
+  Sentry.logger.error(message, payload);
+}
+
+export function captureServerMessage(
+  message: string,
+  options?: {
+    context?: MonitoringContext;
+    level?: "info" | "warning" | "error";
+    extras?: Record<string, unknown>;
+    fingerprint?: string[];
+  },
+): string {
+  return Sentry.withScope((scope) => {
+    applyScopeContext(scope, options?.context);
+
+    if (options?.level) {
+      scope.setLevel(options.level);
+    }
+
+    if (options?.fingerprint?.length) {
+      scope.setFingerprint(options.fingerprint);
+    }
+
+    if (options?.extras) {
+      for (const [key, value] of Object.entries(options.extras)) {
+        if (typeof value !== "undefined") {
+          scope.setExtra(key, redactSensitiveData(value));
+        }
+      }
+    }
+
+    return Sentry.captureMessage(message, options?.level ?? "warning");
+  });
 }

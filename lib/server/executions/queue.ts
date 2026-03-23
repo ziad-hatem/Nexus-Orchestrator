@@ -72,7 +72,7 @@ function parseJob(raw: unknown): ExecutionQueueJob | null {
       typeof parsed?.runKey !== "string" ||
       typeof parsed?.correlationId !== "string" ||
       typeof parsed?.enqueuedAt !== "string" ||
-      (parsed?.reason !== "trigger" && parsed?.reason !== "retry")
+      !["trigger", "retry", "manual_retry"].includes(parsed?.reason)
     ) {
       return null;
     }
@@ -183,4 +183,19 @@ export async function drainDueExecutionJobs(limit = 20): Promise<number> {
 
 export async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function getExecutionQueueBacklog(): Promise<{
+  ready: number;
+  delayed: number;
+}> {
+  const payload = await runPipeline([
+    ["LLEN", READY_QUEUE_KEY],
+    ["ZCARD", DELAYED_QUEUE_KEY],
+  ]);
+
+  return {
+    ready: Number(payload[0]?.result ?? 0),
+    delayed: Number(payload[1]?.result ?? 0),
+  };
 }

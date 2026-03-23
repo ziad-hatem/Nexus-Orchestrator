@@ -12,6 +12,7 @@ import {
   listWorkflowIngestionEventsByWorkflowDbId,
   listWorkflowRowsByIds,
   listWorkflowVersionRowsByIds,
+  markTriggerBindingSecretUsed,
   updateTriggerBindingSecret,
   updateWorkflowRunCreatedByEvent,
   updateWorkflowRunEventLink,
@@ -30,12 +31,19 @@ import {
   buildWebhookIdempotencyKey,
   buildWebhookRateLimitKey,
   enforceRateLimit,
+  incrementWindowCounter,
   reserveIdempotencyKey,
 } from "@/lib/server/triggers/rate-limit";
 import {
   createWebhookSecret,
   verifyWebhookApiKey,
 } from "@/lib/server/triggers/security";
+import {
+  emitOperationalAlert,
+  evaluateOperationalAlerts,
+  getOperationsAlertLookbackMinutes,
+} from "@/lib/observability/alerts";
+import { createChildLogger, writeLog } from "@/lib/observability/logger";
 import {
   matchInternalEventBindings,
   matchWebhookTriggerBinding,
@@ -51,6 +59,7 @@ import {
 import {
   getExecutionMaxRetries,
 } from "@/lib/server/executions/queue";
+import { createWorkflowRunAttemptRow } from "@/lib/server/executions/repository";
 import {
   enqueueWorkflowRunForExecution,
 } from "@/lib/server/executions/service";
@@ -76,6 +85,9 @@ const WEBHOOK_RATE_LIMIT_MAX_REQUESTS = 60;
 const INTERNAL_EVENT_RATE_LIMIT_WINDOW_SECONDS = 60;
 const INTERNAL_EVENT_RATE_LIMIT_MAX_REQUESTS = 120;
 const IDEMPOTENCY_TTL_SECONDS = 60 * 60 * 24;
+const WEBHOOK_REJECTION_METRIC_PREFIX = "wf:metrics:webhook:rejected";
+const WEBHOOK_RATE_LIMIT_METRIC_PREFIX = "wf:metrics:webhook:rate_limited";
+const WEBHOOK_DUPLICATE_METRIC_PREFIX = "wf:metrics:webhook:duplicate";
 
 export class WorkflowTriggerSecurityError extends Error {
   status: number;
@@ -114,6 +126,62 @@ function toRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? { ...(value as Record<string, unknown>) }
     : {};
+}
+
+function createTriggerLogger(context: Record<string, unknown>) {
+  return createChildLogger({
+    route: "server.triggers.service",
+    ...context,
+  });
+}
+
+function getWebhookMetricWindowSeconds(): number {
+  return getOperationsAlertLookbackMinutes() * 60;
+}
+
+async function trackWebhookMetric(params: {
+  binding: TriggerBindingRow;
+  metric: "rejected" | "rate_limited" | "duplicate";
+  reason?: string | null;
+}) {
+  const prefix =
+    params.metric === "rejected"
+      ? WEBHOOK_REJECTION_METRIC_PREFIX
+      : params.metric === "rate_limited"
+        ? WEBHOOK_RATE_LIMIT_METRIC_PREFIX
+        : WEBHOOK_DUPLICATE_METRIC_PREFIX;
+  const counter = await incrementWindowCounter({
+    key: `${prefix}:${params.binding.organization_id}:${params.binding.id}`,
+    windowSeconds: getWebhookMetricWindowSeconds(),
+  });
+
+  if (params.metric !== "rejected") {
+    return counter.current;
+  }
+
+  const [alert] = evaluateOperationalAlerts({
+    queueBacklog: 0,
+    staleRunningCount: 0,
+    recentWebhookRejections: counter.current,
+    retryExhaustionCount: 0,
+  }).filter((candidate) => candidate.key === "webhook_rejection_spike");
+
+  if (alert && alert.status !== "ok") {
+    emitOperationalAlert({
+      alert,
+      context: {
+        organizationId: params.binding.organization_id,
+        workflowId: params.binding.workflow_id,
+        securityEvent: "webhook_rejection_spike",
+      },
+      extras: {
+        bindingId: params.binding.id,
+        reason: params.reason ?? null,
+      },
+    });
+  }
+
+  return counter.current;
 }
 
 function getPublicAppOrigin(): string | null {
@@ -224,6 +292,8 @@ function buildWebhookSecretState(
     endpointPath,
     endpointUrl: toAbsoluteAppUrl(endpointPath),
     apiKeyRequired: true,
+    secretRotatedAt: binding?.secret_rotated_at ?? null,
+    secretLastUsedAt: binding?.secret_last_used_at ?? null,
   };
 }
 
@@ -400,6 +470,17 @@ async function createAcceptedIngestionWithRun(params: {
     payload: params.payload,
     maxAttempts: getExecutionMaxRetries(),
     idempotencyKey: params.idempotencyKey ?? null,
+  });
+  await createWorkflowRunAttemptRow({
+    runId: run.id,
+    organizationId: run.organization_id,
+    workflowId: run.workflow_id,
+    workflowVersionId: run.workflow_version_id,
+    attemptNumber: 1,
+    launchReason: "initial",
+    scheduledFor: run.created_at,
+    backoffSeconds: 0,
+    status: "scheduled",
   });
 
   await Promise.all([
@@ -810,6 +891,12 @@ export async function ingestWebhookDelivery(params: {
       kind: "not_found" as const,
     };
   }
+  const logger = createTriggerLogger({
+    organizationId: binding.organization_id,
+    workflowId: binding.workflow_id,
+    securityEvent: "webhook_ingestion",
+    path: params.pathname,
+  });
 
   const sourceContext: WorkflowSourceContext = {
     sourceLabel: "webhook",
@@ -832,6 +919,11 @@ export async function ingestWebhookDelivery(params: {
   });
 
   if (!rateLimit.ok) {
+    await trackWebhookMetric({
+      binding,
+      metric: "rate_limited",
+      reason: "rate_limited",
+    }).catch(() => undefined);
     await createWorkflowIngestionEventRow({
       organizationId: binding.organization_id,
       workflowDbId: binding.workflow_id,
@@ -848,6 +940,10 @@ export async function ingestWebhookDelivery(params: {
       requestIp: params.requestIp,
       requestUserAgent: params.requestUserAgent,
     });
+    writeLog(logger, "warn", "Webhook delivery exceeded rate limit", {
+      bindingId: binding.id,
+      requestIp: params.requestIp ?? null,
+    });
     return {
       kind: "rate_limited" as const,
       binding,
@@ -860,6 +956,11 @@ export async function ingestWebhookDelivery(params: {
   });
 
   if (!verification.ok) {
+    await trackWebhookMetric({
+      binding,
+      metric: "rejected",
+      reason: verification.reason,
+    }).catch(() => undefined);
     await createWorkflowIngestionEventRow({
       organizationId: binding.organization_id,
       workflowDbId: binding.workflow_id,
@@ -879,12 +980,33 @@ export async function ingestWebhookDelivery(params: {
       requestIp: params.requestIp,
       requestUserAgent: params.requestUserAgent,
     });
+    await writeAuditLog({
+      organizationId: binding.organization_id,
+      actorUserId: null,
+      action: "workflow.webhook_auth_rejected",
+      entityType: "workflow",
+      entityId: binding.workflow_id,
+      metadata: {
+        bindingId: binding.id,
+        endpointPath: binding.match_key,
+        reason: verification.reason,
+        requestIp: params.requestIp ?? null,
+        requestUserAgent: params.requestUserAgent ?? null,
+      },
+    });
+    writeLog(logger, "warn", "Webhook API key validation failed", {
+      bindingId: binding.id,
+      reason: verification.reason,
+      requestIp: params.requestIp ?? null,
+    });
     return {
       kind: "rejected" as const,
       binding,
       reason: verification.reason,
     };
   }
+
+  await markTriggerBindingSecretUsed(binding.id).catch(() => undefined);
 
   const dedupeKey = buildWebhookIdempotencyKey({
     bindingId: binding.id,
@@ -897,6 +1019,11 @@ export async function ingestWebhookDelivery(params: {
   });
 
   if (!idempotencyReservation.reserved) {
+    await trackWebhookMetric({
+      binding,
+      metric: "duplicate",
+      reason: "duplicate_delivery",
+    }).catch(() => undefined);
     await createWorkflowIngestionEventRow({
       organizationId: binding.organization_id,
       workflowDbId: binding.workflow_id,
@@ -916,6 +1043,10 @@ export async function ingestWebhookDelivery(params: {
       requestIp: params.requestIp,
       requestUserAgent: params.requestUserAgent,
     });
+    writeLog(logger, "warn", "Duplicate webhook delivery rejected", {
+      bindingId: binding.id,
+      idempotencyKey: dedupeKey,
+    });
     return {
       kind: "duplicate" as const,
       binding,
@@ -932,6 +1063,12 @@ export async function ingestWebhookDelivery(params: {
     idempotencyKey: dedupeKey,
     requestIp: params.requestIp,
     requestUserAgent: params.requestUserAgent,
+  });
+
+  writeLog(logger, "info", "Webhook delivery accepted", {
+    bindingId: binding.id,
+    runId: accepted.run.runId,
+    correlationId: accepted.run.correlationId,
   });
 
   return {

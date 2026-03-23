@@ -150,7 +150,7 @@ export function WorkflowFlowEditor({
           <NodePaletteCard
             nodeType="action"
             title="Action"
-            description="Send data, notify systems, or mutate downstream state."
+            description="Send webhooks, deliver email, create tasks, or update tenant-safe records."
           />
         </div>
 

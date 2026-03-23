@@ -1,21 +1,15 @@
 import {
   DEFAULT_THEME_PREFERENCE,
-  THEME_COOKIE_NAME,
   THEME_STORAGE_KEY,
+  type ThemePreference,
 } from "@/lib/theme";
 
-const themeBootstrapScript = `
+function getThemeBootstrapScript(initialThemePreference: ThemePreference) {
+  return `
 (() => {
   const storageKey = ${JSON.stringify(THEME_STORAGE_KEY)};
-  const cookieName = ${JSON.stringify(THEME_COOKIE_NAME)};
-  const defaultPreference = ${JSON.stringify(DEFAULT_THEME_PREFERENCE)};
-  const valid = new Set(["light", "dark", "system"]);
-
-  const readCookie = (name) => {
-    const escaped = name.replace(/[.*+?^$()|[\\]\\\\]/g, "\\\\$&");
-    const match = document.cookie.match(new RegExp("(?:^|; )" + escaped + "=([^;]+)"));
-    return match ? decodeURIComponent(match[1]) : null;
-  };
+  const preference = ${JSON.stringify(initialThemePreference)};
+  const fallbackPreference = ${JSON.stringify(DEFAULT_THEME_PREFERENCE)};
 
   const applyTheme = (preference) => {
     const prefersDark =
@@ -32,26 +26,24 @@ const themeBootstrapScript = `
   };
 
   try {
-    const stored = window.localStorage.getItem(storageKey);
-    const cookie = readCookie(cookieName);
-    const preference = valid.has(stored ?? "")
-      ? stored
-      : valid.has(cookie ?? "")
-        ? cookie
-        : defaultPreference;
-
     applyTheme(preference);
+    window.localStorage.setItem(storageKey, preference);
   } catch {
-    applyTheme(defaultPreference);
+    applyTheme(fallbackPreference);
   }
 })();
 `;
+}
 
-export function ThemeScript() {
+type ThemeScriptProps = {
+  initialThemePreference: ThemePreference;
+};
+
+export function ThemeScript({ initialThemePreference }: ThemeScriptProps) {
   return (
     <script
       dangerouslySetInnerHTML={{
-        __html: themeBootstrapScript,
+        __html: getThemeBootstrapScript(initialThemePreference),
       }}
     />
   );

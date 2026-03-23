@@ -27,9 +27,10 @@ export const WORKFLOW_SUPPORTED_TRIGGER_TYPES = [
 ] as const;
 
 export const WORKFLOW_SUPPORTED_ACTION_TYPES = [
-  "notify",
-  "webhook_request",
-  "ticket_update",
+  "send_webhook",
+  "send_email",
+  "create_task",
+  "update_record_field",
 ] as const;
 
 export const WORKFLOW_ACTION_TYPES = [
@@ -40,6 +41,14 @@ export const WORKFLOW_ACTION_TYPES = [
 export const WORKFLOW_CONDITION_BRANCH_KEYS = [
   "true",
   "false",
+] as const;
+
+export const WORKFLOW_RECORD_VALUE_TYPES = [
+  "string",
+  "number",
+  "boolean",
+  "null",
+  "json",
 ] as const;
 
 export const WORKFLOW_CONDITION_RESOLVER_SCOPES = [
@@ -82,6 +91,8 @@ export type WorkflowActionType =
   (typeof WORKFLOW_ACTION_TYPES)[number];
 export type WorkflowConditionBranchKey =
   (typeof WORKFLOW_CONDITION_BRANCH_KEYS)[number];
+export type WorkflowRecordValueType =
+  (typeof WORKFLOW_RECORD_VALUE_TYPES)[number];
 export type WorkflowConditionResolverScope =
   (typeof WORKFLOW_CONDITION_RESOLVER_SCOPES)[number];
 export type WorkflowConditionOperator =
@@ -134,6 +145,8 @@ export type WorkflowActionConfig = {
   description: string;
   type: WorkflowActionType;
   config: Record<string, unknown>;
+  legacySourceType?: string | null;
+  legacyIssue?: string | null;
 };
 
 export type WorkflowCanvasNode = {
@@ -297,6 +310,8 @@ export type WorkflowWebhookSecretState = {
   endpointPath: string | null;
   endpointUrl: string | null;
   apiKeyRequired: boolean;
+  secretRotatedAt: string | null;
+  secretLastUsedAt: string | null;
 };
 
 export type WorkflowTriggerSummary = {
@@ -325,6 +340,34 @@ export type WorkflowTriggerDetails = {
   recentAttempts: WorkflowIngestionEventSummary[];
 };
 
+export type WorkflowRunAttemptLaunchReason =
+  | "initial"
+  | "automatic_retry"
+  | "manual_retry";
+
+export type WorkflowRunAttemptStatus =
+  | "scheduled"
+  | "running"
+  | "success"
+  | "failed"
+  | "cancelled";
+
+export type WorkflowRunFailureSummary = {
+  failureCode: string;
+  count: number;
+};
+
+export type WorkflowRunListSummary = {
+  total: number;
+  pending: number;
+  running: number;
+  success: number;
+  failed: number;
+  retrying: number;
+  cancelled: number;
+  topFailureCodes: WorkflowRunFailureSummary[];
+};
+
 export type WorkflowRunSummary = {
   runId: string;
   workflowId: string;
@@ -342,9 +385,13 @@ export type WorkflowRunSummary = {
   cancelledAt: string | null;
   createdAt: string;
   lastHeartbeatAt: string | null;
+  nextRetryAt: string | null;
+  lastRetryAt: string | null;
   failureCode: string | null;
   failureMessage: string | null;
   idempotencyKey: string | null;
+  retryEligible: boolean;
+  cancelEligible: boolean;
 };
 
 export type WorkflowRunStepStatus =
@@ -374,11 +421,26 @@ export type WorkflowRunStepRecord = {
   completedAt: string | null;
 };
 
+export type WorkflowRunAttemptRecord = {
+  attemptNumber: number;
+  launchReason: WorkflowRunAttemptLaunchReason;
+  requestedBy: WorkflowActor | null;
+  requestNote: string | null;
+  scheduledFor: string | null;
+  backoffSeconds: number | null;
+  status: WorkflowRunAttemptStatus;
+  failureCode: string | null;
+  failureMessage: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+};
+
 export type WorkflowRunDetail = WorkflowRunSummary & {
   sourceContext: WorkflowSourceContext;
   payload: Record<string, unknown>;
   createdByEventId: string | null;
   cancelRequestedAt: string | null;
+  attempts: WorkflowRunAttemptRecord[];
   versionValidationIssues: ValidationIssue[];
   recentEvent: {
     eventId: string;
@@ -402,45 +464,222 @@ function toStringValue(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
+function toStringMap(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .map(([key, candidate]) => [key.trim(), toStringValue(candidate).trim()])
+      .filter(([key]) => key.length > 0),
+  );
+}
+
 function toNumberValue(value: unknown, fallback = 0): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function buildLegacyCustomAction(params: {
+  action: Record<string, unknown>;
+  rawConfig: Record<string, unknown>;
+  issue: string;
+  sourceType: string;
+}): WorkflowActionConfig {
+  const legacyOperation =
+    toStringValue(params.action.operation) ||
+    toStringValue(params.rawConfig.operation);
+  const legacyTarget =
+    toStringValue(params.action.target) || toStringValue(params.rawConfig.target);
+
+  return {
+    id: toStringValue(params.action.id) || createWorkflowEntityId("action"),
+    label:
+      toStringValue(params.action.label) ||
+      getWorkflowActionTypeLabel("legacy_custom"),
+    description: toStringValue(params.action.description),
+    type: "legacy_custom",
+    config: {
+      operation: legacyOperation,
+      target: legacyTarget,
+      ...params.rawConfig,
+    },
+    legacySourceType: params.sourceType || null,
+    legacyIssue: params.issue,
+  } satisfies WorkflowActionConfig;
+}
+
+function buildLegacyNotifyEmailBody(params: {
+  message: string;
+  templateReference: string;
+}): string {
+  return [params.message.trim(), params.templateReference.trim()]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function normalizeSupportedWorkflowActionConfig(
+  type: SupportedWorkflowActionType,
+  rawConfig: Record<string, unknown>,
+): Record<string, unknown> {
+  switch (type) {
+    case "send_webhook":
+      return {
+        ...createDefaultWorkflowActionConfig(type),
+        ...rawConfig,
+        url: toStringValue(rawConfig.url).trim(),
+        method: toStringValue(rawConfig.method).trim() || "POST",
+        headers: toStringMap(rawConfig.headers),
+        body: toStringValue(rawConfig.body),
+      };
+    case "send_email":
+      return {
+        ...createDefaultWorkflowActionConfig(type),
+        ...rawConfig,
+        to: toStringValue(rawConfig.to).trim(),
+        subject: toStringValue(rawConfig.subject),
+        body: toStringValue(rawConfig.body),
+        replyTo: toStringValue(rawConfig.replyTo).trim(),
+      };
+    case "create_task":
+      return {
+        ...createDefaultWorkflowActionConfig(type),
+        ...rawConfig,
+        title: toStringValue(rawConfig.title),
+        description: toStringValue(rawConfig.description),
+        assigneeEmail: toStringValue(rawConfig.assigneeEmail).trim(),
+        dueAt: toStringValue(rawConfig.dueAt).trim(),
+      };
+    case "update_record_field":
+    default:
+      return {
+        ...createDefaultWorkflowActionConfig(type),
+        ...rawConfig,
+        recordType: toStringValue(rawConfig.recordType).trim(),
+        recordKey: toStringValue(rawConfig.recordKey).trim(),
+        field: toStringValue(rawConfig.field).trim(),
+        valueType:
+          typeof rawConfig.valueType === "string" ? rawConfig.valueType : "string",
+        valueTemplate: toStringValue(rawConfig.valueTemplate),
+      };
+  }
 }
 
 function normalizeWorkflowActionRecord(value: unknown): WorkflowActionConfig {
   const action = toRecord(value);
   const rawConfig = toRecord(action.config);
+  const rawType = toStringValue(action.type).trim();
+  const rawLabel = toStringValue(action.label);
+  const rawDescription = toStringValue(action.description);
   const legacyOperation =
     toStringValue(action.operation) || toStringValue(rawConfig.operation);
   const legacyTarget =
     toStringValue(action.target) || toStringValue(rawConfig.target);
-  const type = isWorkflowActionType(action.type)
-    ? action.type
-    : legacyOperation || legacyTarget
-      ? "legacy_custom"
-      : "notify";
 
-  const config =
-    type === "legacy_custom"
-      ? {
-          operation: legacyOperation,
-          target: legacyTarget,
-          ...rawConfig,
-        }
-      : {
-          ...createDefaultWorkflowActionConfig(type),
-          ...rawConfig,
-        };
+  if (isSupportedWorkflowActionType(rawType)) {
+    return {
+      id: toStringValue(action.id) || createWorkflowEntityId("action"),
+      label: rawLabel || getWorkflowActionTypeLabel(rawType),
+      description: rawDescription,
+      type: rawType,
+      config: normalizeSupportedWorkflowActionConfig(rawType, rawConfig),
+      legacySourceType: null,
+      legacyIssue: null,
+    } satisfies WorkflowActionConfig;
+  }
+
+  if (rawType === "webhook_request") {
+    return {
+      id: toStringValue(action.id) || createWorkflowEntityId("action"),
+      label: rawLabel || getWorkflowActionTypeLabel("send_webhook"),
+      description: rawDescription,
+      type: "send_webhook",
+      config: normalizeSupportedWorkflowActionConfig("send_webhook", {
+        url: rawConfig.url,
+        method: rawConfig.method,
+        headers: rawConfig.headers,
+        body:
+          typeof rawConfig.body === "string"
+            ? rawConfig.body
+            : rawConfig.payloadTemplate,
+      }),
+      legacySourceType: "webhook_request",
+      legacyIssue: null,
+    } satisfies WorkflowActionConfig;
+  }
+
+  if (rawType === "notify") {
+    const channel =
+      toStringValue(rawConfig.channel).trim() ||
+      toStringValue(action.channel).trim() ||
+      "email";
+
+    if (channel === "email") {
+      const recipient = toStringValue(rawConfig.recipient).trim();
+      const templateReference = toStringValue(rawConfig.template);
+      const message = toStringValue(rawConfig.message);
+      const subject =
+        rawLabel.trim() ||
+        templateReference.trim() ||
+        "Workflow notification";
+
+      return {
+        id: toStringValue(action.id) || createWorkflowEntityId("action"),
+        label: rawLabel || getWorkflowActionTypeLabel("send_email"),
+        description: rawDescription,
+        type: "send_email",
+        config: normalizeSupportedWorkflowActionConfig("send_email", {
+          to: recipient,
+          subject,
+          body: buildLegacyNotifyEmailBody({
+            message,
+            templateReference: templateReference
+              ? `Legacy template reference: ${templateReference}`
+              : "",
+          }),
+        }),
+        legacySourceType: "notify",
+        legacyIssue: null,
+      } satisfies WorkflowActionConfig;
+    }
+
+    return buildLegacyCustomAction({
+      action,
+      rawConfig,
+      sourceType: "notify",
+      issue:
+        "Legacy notify actions using SMS or in-app delivery must be converted to Send email, Send webhook, Create task, or Update record before publishing.",
+    });
+  }
+
+  if (rawType === "ticket_update") {
+    return buildLegacyCustomAction({
+      action,
+      rawConfig,
+      sourceType: "ticket_update",
+      issue:
+        "Legacy ticket update actions must be converted to Send webhook, Send email, Create task, or Update record before publishing.",
+    });
+  }
+
+  if (rawType === "legacy_custom" || legacyOperation || legacyTarget || rawType) {
+    return buildLegacyCustomAction({
+      action,
+      rawConfig,
+      sourceType: rawType || "legacy_custom",
+      issue:
+        "This action came from an older workflow format and must be converted to a supported phase-six action before publishing.",
+    });
+  }
 
   return {
     id: toStringValue(action.id) || createWorkflowEntityId("action"),
-    label:
-      toStringValue(action.label) ||
-      (type === "legacy_custom"
-        ? "Legacy action"
-        : getWorkflowActionTypeLabel(type)),
-    description: toStringValue(action.description),
-    type,
-    config,
+    label: rawLabel || getWorkflowActionTypeLabel("send_email"),
+    description: rawDescription,
+    type: "send_email",
+    config: createDefaultWorkflowActionConfig("send_email"),
+    legacySourceType: null,
+    legacyIssue: null,
   } satisfies WorkflowActionConfig;
 }
 
@@ -566,12 +805,14 @@ export function getWorkflowConditionOperatorLabel(
 
 export function getWorkflowActionTypeLabel(type: WorkflowActionType): string {
   switch (type) {
-    case "notify":
-      return "Notify";
-    case "webhook_request":
-      return "Webhook request";
-    case "ticket_update":
-      return "Ticket update";
+    case "send_webhook":
+      return "Send webhook";
+    case "send_email":
+      return "Send email";
+    case "create_task":
+      return "Create task";
+    case "update_record_field":
+      return "Update record field";
     case "legacy_custom":
     default:
       return "Legacy custom";
@@ -582,31 +823,41 @@ export function createDefaultWorkflowActionConfig(
   type: SupportedWorkflowActionType,
 ): Record<string, unknown> {
   switch (type) {
-    case "notify":
-      return {
-        channel: "email",
-        recipient: "",
-        template: "",
-        message: "",
-      };
-    case "webhook_request":
+    case "send_webhook":
       return {
         url: "",
         method: "POST",
-        payloadTemplate: "",
+        headers: {},
+        body: "",
       };
-    case "ticket_update":
+    case "send_email":
+      return {
+        to: "",
+        subject: "",
+        body: "",
+        replyTo: "",
+      };
+    case "create_task":
+      return {
+        title: "",
+        description: "",
+        assigneeEmail: "",
+        dueAt: "",
+      };
+    case "update_record_field":
     default:
       return {
+        recordType: "",
+        recordKey: "",
         field: "status",
-        value: "",
-        note: "",
+        valueType: "string",
+        valueTemplate: "",
       };
   }
 }
 
 export function createWorkflowActionDefinition(
-  type: SupportedWorkflowActionType = "notify",
+  type: SupportedWorkflowActionType = "send_email",
 ): WorkflowActionConfig {
   return {
     id: createWorkflowEntityId("action"),
@@ -614,6 +865,8 @@ export function createWorkflowActionDefinition(
     label: getWorkflowActionTypeLabel(type),
     description: "",
     config: createDefaultWorkflowActionConfig(type),
+    legacySourceType: null,
+    legacyIssue: null,
   };
 }
 

@@ -27,6 +27,7 @@ import type {
   WorkflowConditionResolverScope,
   WorkflowConditionValue,
   WorkflowDraftDocument,
+  WorkflowRecordValueType,
   WorkflowTriggerConfig,
   ValidationIssue,
 } from "@/lib/server/workflows/types";
@@ -91,10 +92,10 @@ function getActionCompletionState(action: WorkflowActionConfig): {
   complete: boolean;
   missing: string[];
 } {
-  if (action.type === "legacy_custom") {
+  if (action.type === "legacy_custom" || action.legacyIssue) {
     return {
       complete: false,
-      missing: ["convert this legacy action to a supported type"],
+      missing: [action.legacyIssue ?? "convert this legacy action to a supported type"],
     };
   }
 
@@ -102,28 +103,42 @@ function getActionCompletionState(action: WorkflowActionConfig): {
   const missing: string[] = [];
 
   switch (action.type) {
-    case "notify":
-      if (!String(config.recipient ?? "").trim()) {
+    case "send_email":
+      if (!String(config.to ?? "").trim()) {
         missing.push("recipient");
       }
-      if (
-        !String(config.template ?? "").trim() &&
-        !String(config.message ?? "").trim()
-      ) {
-        missing.push("message or template");
+      if (!String(config.subject ?? "").trim()) {
+        missing.push("subject");
+      }
+      if (!String(config.body ?? "").trim()) {
+        missing.push("body");
       }
       break;
-    case "webhook_request":
+    case "send_webhook":
       if (!String(config.url ?? "").trim()) {
         missing.push("destination URL");
       }
-      if (!String(config.payloadTemplate ?? "").trim()) {
-        missing.push("payload template");
+      break;
+    case "create_task":
+      if (!String(config.title ?? "").trim()) {
+        missing.push("task title");
       }
       break;
-    case "ticket_update":
-      if (!String(config.value ?? "").trim()) {
-        missing.push("update value");
+    case "update_record_field":
+      if (!String(config.recordType ?? "").trim()) {
+        missing.push("record type");
+      }
+      if (!String(config.recordKey ?? "").trim()) {
+        missing.push("record key");
+      }
+      if (!String(config.field ?? "").trim()) {
+        missing.push("field");
+      }
+      if (
+        String(config.valueType ?? "string") !== "null" &&
+        !String(config.valueTemplate ?? "").trim()
+      ) {
+        missing.push("value template");
       }
       break;
     default:
@@ -134,6 +149,56 @@ function getActionCompletionState(action: WorkflowActionConfig): {
     complete: missing.length === 0,
     missing,
   };
+}
+
+function serializeWebhookHeaders(value: unknown): string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return "";
+  }
+
+  return Object.entries(value as Record<string, unknown>)
+    .map(([key, headerValue]) => `${key}: ${String(headerValue ?? "")}`)
+    .join("\n");
+}
+
+function parseWebhookHeaders(value: string): Record<string, string> {
+  const headers: Record<string, string> = {};
+  for (const line of value.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      continue;
+    }
+
+    const separatorIndex = trimmed.indexOf(":");
+    if (separatorIndex === -1) {
+      headers[trimmed] = "";
+      continue;
+    }
+
+    const key = trimmed.slice(0, separatorIndex).trim();
+    const headerValue = trimmed.slice(separatorIndex + 1).trim();
+    if (key) {
+      headers[key] = headerValue;
+    }
+  }
+
+  return headers;
+}
+
+function getRecordValueTypeLabel(valueType: WorkflowRecordValueType): string {
+  switch (valueType) {
+    case "number":
+      return "Number";
+    case "boolean":
+      return "Boolean";
+    case "null":
+      return "Null";
+    case "json":
+      return "JSON";
+    case "string":
+    default:
+      return "String";
+  }
 }
 
 type ConditionValueKind = "string" | "number" | "boolean" | "null";
@@ -963,6 +1028,14 @@ export function WorkflowNodeInspector({
                       : createDefaultWorkflowActionConfig(
                           value as Exclude<WorkflowActionType, "legacy_custom">,
                         ),
+                  legacyIssue:
+                    value === "legacy_custom"
+                      ? selectedAction.legacyIssue ?? null
+                      : null,
+                  legacySourceType:
+                    value === "legacy_custom"
+                      ? selectedAction.legacySourceType ?? null
+                      : null,
                 })
               }
             >
@@ -970,115 +1043,117 @@ export function WorkflowNodeInspector({
                 <SelectValue placeholder="Choose an action type" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="notify">Notify</SelectItem>
-                <SelectItem value="webhook_request">Webhook request</SelectItem>
-                <SelectItem value="ticket_update">Ticket update</SelectItem>
-                <SelectItem value="legacy_custom">Legacy custom</SelectItem>
+                <SelectItem value="send_email">Send email</SelectItem>
+                <SelectItem value="send_webhook">Send webhook</SelectItem>
+                <SelectItem value="create_task">Create task</SelectItem>
+                <SelectItem value="update_record_field">Update record field</SelectItem>
+                {selectedAction.type === "legacy_custom" ? (
+                  <SelectItem value="legacy_custom">Legacy custom</SelectItem>
+                ) : null}
               </SelectContent>
             </Select>
           </div>
 
           {selectedAction.type === "legacy_custom" ? (
             <div className="rounded-[1.5rem] bg-[var(--error-container)] p-4 text-sm text-[var(--error)]">
-              This action came from the older free-form model. Switch it to Notify, Webhook request, or Ticket update before publishing.
+              {selectedAction.legacyIssue ??
+                "This action came from the older free-form model. Switch it to Send webhook, Send email, Create task, or Update record before publishing."}
             </div>
           ) : null}
 
-          {selectedAction.type === "notify" ? (
+          {selectedAction.type === "send_email" ? (
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-notify-channel">
-                  Channel
-                </label>
-                <Select
-                  value={String(selectedAction.config.channel ?? "email")}
-                  disabled={disabled}
-                  onValueChange={(value) =>
-                    onChangeAction(selectedAction.id, {
-                      config: updateConfigRecord(selectedAction.config, "channel", value),
-                    })
-                  }
-                >
-                  <SelectTrigger id="workflow-action-notify-channel">
-                    <SelectValue placeholder="Choose a channel" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="email">Email</SelectItem>
-                    <SelectItem value="sms">SMS</SelectItem>
-                    <SelectItem value="in_app">In app</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-notify-recipient">
+                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-email-to">
                   Recipient
                 </label>
                 <Input
-                  id="workflow-action-notify-recipient"
-                  value={String(selectedAction.config.recipient ?? "")}
+                  id="workflow-action-email-to"
+                  value={String(selectedAction.config.to ?? "")}
                   disabled={disabled}
                   onChange={(event) =>
                     onChangeAction(selectedAction.id, {
                       config: updateConfigRecord(
                         selectedAction.config,
-                        "recipient",
+                        "to",
                         event.target.value,
                       ),
                     })
                   }
-                  placeholder="support@nexus.dev"
+                  placeholder="ops@example.com or {{ payload.customerEmail }}"
                   className="input-field border-0 shadow-none"
                 />
               </div>
 
               <div>
-                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-notify-template">
-                  Template
+                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-email-reply-to">
+                  Reply-to
                 </label>
                 <Input
-                  id="workflow-action-notify-template"
-                  value={String(selectedAction.config.template ?? "")}
+                  id="workflow-action-email-reply-to"
+                  value={String(selectedAction.config.replyTo ?? "")}
                   disabled={disabled}
                   onChange={(event) =>
                     onChangeAction(selectedAction.id, {
                       config: updateConfigRecord(
                         selectedAction.config,
-                        "template",
+                        "replyTo",
                         event.target.value,
                       ),
                     })
                   }
-                  placeholder="payment-failed-alert"
+                  placeholder="support@example.com"
                   className="input-field border-0 shadow-none"
                 />
               </div>
 
               <div className="sm:col-span-2">
-                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-notify-message">
-                  Message
+                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-email-subject">
+                  Subject
                 </label>
-                <textarea
-                  id="workflow-action-notify-message"
-                  value={String(selectedAction.config.message ?? "")}
+                <Input
+                  id="workflow-action-email-subject"
+                  value={String(selectedAction.config.subject ?? "")}
                   disabled={disabled}
                   onChange={(event) =>
                     onChangeAction(selectedAction.id, {
                       config: updateConfigRecord(
                         selectedAction.config,
-                        "message",
+                        "subject",
                         event.target.value,
                       ),
                     })
                   }
-                  placeholder="Payment failed for {{payload.customerEmail}}."
+                  placeholder="Payment failed for {{ payload.orderId }}"
+                  className="input-field border-0 shadow-none"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-email-body">
+                  Body
+                </label>
+                <textarea
+                  id="workflow-action-email-body"
+                  value={String(selectedAction.config.body ?? "")}
+                  disabled={disabled}
+                  onChange={(event) =>
+                    onChangeAction(selectedAction.id, {
+                      config: updateConfigRecord(
+                        selectedAction.config,
+                        "body",
+                        event.target.value,
+                      ),
+                    })
+                  }
+                  placeholder={"Hello {{ payload.customerName }},\n\nWe couldn't process your payment for {{ payload.orderId }}."}
                   className="min-h-24 w-full rounded-[1.1rem] border border-[color:color-mix(in_srgb,var(--outline-variant)_56%,transparent)] bg-[var(--input-background)] px-4 py-3 text-sm text-[var(--on-surface)] outline-none transition focus:border-primary/40 focus:ring-4 focus:ring-primary/10"
                 />
               </div>
             </div>
           ) : null}
 
-          {selectedAction.type === "webhook_request" ? (
+          {selectedAction.type === "send_webhook" ? (
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-webhook-method">
@@ -1127,98 +1202,277 @@ export function WorkflowNodeInspector({
               </div>
 
               <div className="sm:col-span-2">
-                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-webhook-payload">
-                  Payload template
+                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-webhook-headers">
+                  Headers
                 </label>
                 <textarea
-                  id="workflow-action-webhook-payload"
-                  value={String(selectedAction.config.payloadTemplate ?? "")}
+                  id="workflow-action-webhook-headers"
+                  value={serializeWebhookHeaders(selectedAction.config.headers)}
                   disabled={disabled}
                   onChange={(event) =>
                     onChangeAction(selectedAction.id, {
                       config: updateConfigRecord(
                         selectedAction.config,
-                        "payloadTemplate",
+                        "headers",
+                        parseWebhookHeaders(event.target.value),
+                      ),
+                    })
+                  }
+                  placeholder={"Content-Type: application/json\nX-Customer-Id: {{ payload.customerId }}"}
+                  className="min-h-24 w-full rounded-[1.1rem] border border-[color:color-mix(in_srgb,var(--outline-variant)_56%,transparent)] bg-[var(--input-background)] px-4 py-3 text-sm font-mono text-[var(--on-surface)] outline-none transition focus:border-primary/40 focus:ring-4 focus:ring-primary/10"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-webhook-body">
+                  Request body
+                </label>
+                <textarea
+                  id="workflow-action-webhook-body"
+                  value={String(selectedAction.config.body ?? "")}
+                  disabled={disabled}
+                  onChange={(event) =>
+                    onChangeAction(selectedAction.id, {
+                      config: updateConfigRecord(
+                        selectedAction.config,
+                        "body",
                         event.target.value,
                       ),
                     })
                   }
-                  placeholder='{"ticketId":"{{payload.ticketId}}","status":"failed"}'
+                  placeholder={'{"ticketId":"{{ payload.ticketId }}","status":"failed"}'}
                   className="min-h-24 w-full rounded-[1.1rem] border border-[color:color-mix(in_srgb,var(--outline-variant)_56%,transparent)] bg-[var(--input-background)] px-4 py-3 text-sm font-mono text-[var(--on-surface)] outline-none transition focus:border-primary/40 focus:ring-4 focus:ring-primary/10"
                 />
               </div>
             </div>
           ) : null}
 
-          {selectedAction.type === "ticket_update" ? (
+          {selectedAction.type === "create_task" ? (
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-ticket-field">
-                  Ticket field
-                </label>
-                <Select
-                  value={String(selectedAction.config.field ?? "status")}
-                  disabled={disabled}
-                  onValueChange={(value) =>
-                    onChangeAction(selectedAction.id, {
-                      config: updateConfigRecord(selectedAction.config, "field", value),
-                    })
-                  }
-                >
-                  <SelectTrigger id="workflow-action-ticket-field">
-                    <SelectValue placeholder="Choose a ticket field" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="status">Status</SelectItem>
-                    <SelectItem value="priority">Priority</SelectItem>
-                    <SelectItem value="assignee">Assignee</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-ticket-value">
-                  Value
+                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-task-title">
+                  Task title
                 </label>
                 <Input
-                  id="workflow-action-ticket-value"
-                  value={String(selectedAction.config.value ?? "")}
+                  id="workflow-action-task-title"
+                  value={String(selectedAction.config.title ?? "")}
                   disabled={disabled}
                   onChange={(event) =>
                     onChangeAction(selectedAction.id, {
                       config: updateConfigRecord(
                         selectedAction.config,
-                        "value",
+                        "title",
                         event.target.value,
                       ),
                     })
                   }
-                  placeholder="high"
+                  placeholder="Follow up on {{ payload.ticketId }}"
+                  className="input-field border-0 shadow-none"
+                />
+              </div>
+
+              <div>
+                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-task-assignee">
+                  Assignee email
+                </label>
+                <Input
+                  id="workflow-action-task-assignee"
+                  value={String(selectedAction.config.assigneeEmail ?? "")}
+                  disabled={disabled}
+                  onChange={(event) =>
+                    onChangeAction(selectedAction.id, {
+                      config: updateConfigRecord(
+                        selectedAction.config,
+                        "assigneeEmail",
+                        event.target.value,
+                      ),
+                    })
+                  }
+                  placeholder="agent@example.com"
+                  className="input-field border-0 shadow-none"
+                />
+              </div>
+
+              <div>
+                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-task-due-at">
+                  Due at
+                </label>
+                <Input
+                  id="workflow-action-task-due-at"
+                  value={String(selectedAction.config.dueAt ?? "")}
+                  disabled={disabled}
+                  onChange={(event) =>
+                    onChangeAction(selectedAction.id, {
+                      config: updateConfigRecord(
+                        selectedAction.config,
+                        "dueAt",
+                        event.target.value,
+                      ),
+                    })
+                  }
+                  placeholder="2026-03-25T09:00:00Z"
                   className="input-field border-0 shadow-none"
                 />
               </div>
 
               <div className="sm:col-span-2">
-                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-ticket-note">
-                  Note
+                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-task-description">
+                  Description
                 </label>
                 <textarea
-                  id="workflow-action-ticket-note"
-                  value={String(selectedAction.config.note ?? "")}
+                  id="workflow-action-task-description"
+                  value={String(selectedAction.config.description ?? "")}
                   disabled={disabled}
                   onChange={(event) =>
                     onChangeAction(selectedAction.id, {
                       config: updateConfigRecord(
                         selectedAction.config,
-                        "note",
+                        "description",
                         event.target.value,
                       ),
                     })
                   }
-                  placeholder="Escalated automatically after payment failure."
+                  placeholder={"Customer {{ payload.customerEmail }} needs a manual follow-up after the failed payment."}
                   className="min-h-24 w-full rounded-[1.1rem] border border-[color:color-mix(in_srgb,var(--outline-variant)_56%,transparent)] bg-[var(--input-background)] px-4 py-3 text-sm text-[var(--on-surface)] outline-none transition focus:border-primary/40 focus:ring-4 focus:ring-primary/10"
                 />
               </div>
+            </div>
+          ) : null}
+
+          {selectedAction.type === "update_record_field" ? (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-record-type">
+                  Record type
+                </label>
+                <Input
+                  id="workflow-action-record-type"
+                  value={String(selectedAction.config.recordType ?? "")}
+                  disabled={disabled}
+                  onChange={(event) =>
+                    onChangeAction(selectedAction.id, {
+                      config: updateConfigRecord(
+                        selectedAction.config,
+                        "recordType",
+                        event.target.value,
+                      ),
+                    })
+                  }
+                  placeholder="ticket"
+                  className="input-field border-0 shadow-none"
+                />
+              </div>
+
+              <div>
+                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-record-key">
+                  Record key
+                </label>
+                <Input
+                  id="workflow-action-record-key"
+                  value={String(selectedAction.config.recordKey ?? "")}
+                  disabled={disabled}
+                  onChange={(event) =>
+                    onChangeAction(selectedAction.id, {
+                      config: updateConfigRecord(
+                        selectedAction.config,
+                        "recordKey",
+                        event.target.value,
+                      ),
+                    })
+                  }
+                  placeholder="{{ payload.ticketId }}"
+                  className="input-field border-0 shadow-none"
+                />
+              </div>
+
+              <div>
+                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-record-field">
+                  Field
+                </label>
+                <Input
+                  id="workflow-action-record-field"
+                  value={String(selectedAction.config.field ?? "")}
+                  disabled={disabled}
+                  onChange={(event) =>
+                    onChangeAction(selectedAction.id, {
+                      config: updateConfigRecord(
+                        selectedAction.config,
+                        "field",
+                        event.target.value,
+                      ),
+                    })
+                  }
+                  placeholder="status"
+                  className="input-field border-0 shadow-none"
+                />
+              </div>
+
+              <div>
+                <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-record-value-type">
+                  Value type
+                </label>
+                <Select
+                  value={String(selectedAction.config.valueType ?? "string")}
+                  disabled={disabled}
+                  onValueChange={(value) =>
+                    onChangeAction(selectedAction.id, {
+                      config: {
+                        ...selectedAction.config,
+                        valueType: value,
+                        valueTemplate:
+                          value === "null"
+                            ? ""
+                            : String(selectedAction.config.valueTemplate ?? ""),
+                      },
+                    })
+                  }
+                >
+                  <SelectTrigger id="workflow-action-record-value-type">
+                    <SelectValue placeholder="Choose a value type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(
+                      ["string", "number", "boolean", "null", "json"] as WorkflowRecordValueType[]
+                    ).map((valueType) => (
+                      <SelectItem key={valueType} value={valueType}>
+                        {getRecordValueTypeLabel(valueType)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {String(selectedAction.config.valueType ?? "string") === "null" ? (
+                <div className="sm:col-span-2 rounded-[1.25rem] bg-[var(--surface-container-low)] px-4 py-4 text-sm leading-6 text-[var(--on-surface-variant)]">
+                  This action will write a null value into the selected workflow-managed record field.
+                </div>
+              ) : (
+                <div className="sm:col-span-2">
+                  <label className="label-caps mb-2 ml-1 block" htmlFor="workflow-action-record-value-template">
+                    Value template
+                  </label>
+                  <textarea
+                    id="workflow-action-record-value-template"
+                    value={String(selectedAction.config.valueTemplate ?? "")}
+                    disabled={disabled}
+                    onChange={(event) =>
+                      onChangeAction(selectedAction.id, {
+                        config: updateConfigRecord(
+                          selectedAction.config,
+                          "valueTemplate",
+                          event.target.value,
+                        ),
+                      })
+                    }
+                    placeholder={
+                      String(selectedAction.config.valueType ?? "string") === "json"
+                        ? '{"status":"failed","reason":"{{ payload.failureReason }}"}'
+                        : "{{ payload.failureReason }}"
+                    }
+                    className="min-h-24 w-full rounded-[1.1rem] border border-[color:color-mix(in_srgb,var(--outline-variant)_56%,transparent)] bg-[var(--input-background)] px-4 py-3 text-sm font-mono text-[var(--on-surface)] outline-none transition focus:border-primary/40 focus:ring-4 focus:ring-primary/10"
+                  />
+                </div>
+              )}
             </div>
           ) : null}
         </div>

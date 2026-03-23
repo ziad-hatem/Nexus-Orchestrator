@@ -5,6 +5,7 @@ import { RouteAnnouncer } from "@/app/components/a11y/route-announcer";
 import { ThemeProvider } from "@/app/components/theme/theme-provider";
 import { ThemeToggle } from "@/app/components/theme/theme-toggle";
 import { useWorkspaceStore } from "@/lib/stores/workspace-store";
+import type { ResolvedTheme, ThemePreference } from "@/lib/theme";
 import { SessionProvider } from "next-auth/react";
 import { useSession } from "next-auth/react";
 import { Suspense, useEffect } from "react";
@@ -12,6 +13,8 @@ import { Toaster } from "sonner";
 
 type ProvidersProps = {
   children: React.ReactNode;
+  initialThemePreference: ThemePreference;
+  initialResolvedTheme: ResolvedTheme;
 };
 
 function SentryUserContextBridge() {
@@ -32,7 +35,6 @@ function SentryUserContextBridge() {
 
     Sentry.setUser({
       id: session.user.id,
-      email: session.user.email ?? undefined,
     });
     setSessionUser({
       id: session.user.id,
@@ -45,9 +47,17 @@ function SentryUserContextBridge() {
   return null;
 }
 
-export function Providers({ children }: ProvidersProps) {
+export function Providers({
+  children,
+  initialThemePreference,
+  initialResolvedTheme,
+}: ProvidersProps) {
   return (
-    <ThemeProvider>
+    <ThemeProvider
+      key={`${initialThemePreference}:${initialResolvedTheme}`}
+      initialResolvedTheme={initialResolvedTheme}
+      initialThemePreference={initialThemePreference}
+    >
       <SessionProvider>
         <SentryUserContextBridge />
         <Suspense fallback={null}>

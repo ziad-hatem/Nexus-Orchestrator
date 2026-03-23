@@ -1,14 +1,22 @@
 import type {
+  WorkflowRecordValueType,
   WorkflowConditionBranchKey,
   WorkflowConditionOperator,
   WorkflowConditionResolverScope,
   WorkflowConditionValue,
+  WorkflowRunAttemptLaunchReason,
+  WorkflowRunAttemptRecord as AppWorkflowRunAttemptRecord,
+  WorkflowRunAttemptStatus,
   WorkflowRunDetail as AppWorkflowRunDetail,
+  WorkflowRunFailureSummary as AppWorkflowRunFailureSummary,
+  WorkflowRunListSummary as AppWorkflowRunListSummary,
   WorkflowRunStepStatus as AppWorkflowRunStepStatus,
   WorkflowRunSummary as AppWorkflowRunSummary,
   WorkflowRunStatus,
+  WorkflowSourceContext,
   WorkflowTriggerSource,
 } from "@/lib/server/workflows/types";
+import type { SupportedActionExecutionOutput } from "@/lib/server/actions/types";
 
 export type ExecutionQueueJob = {
   runDbId: string;
@@ -16,7 +24,7 @@ export type ExecutionQueueJob = {
   runKey: string;
   correlationId: string;
   enqueuedAt: string;
-  reason: "trigger" | "retry";
+  reason: "trigger" | "retry" | "manual_retry";
 };
 
 export type WorkflowRunRow = {
@@ -40,6 +48,8 @@ export type WorkflowRunRow = {
   cancel_requested_at: string | null;
   cancelled_at: string | null;
   last_heartbeat_at: string | null;
+  next_retry_at: string | null;
+  last_retry_at: string | null;
   failure_code: string | null;
   failure_message: string | null;
   created_at: string;
@@ -83,6 +93,8 @@ export type WorkflowRunLookupRow = WorkflowRunRow & {
 };
 
 export type WorkflowRunSummary = AppWorkflowRunSummary;
+export type WorkflowRunFailureSummary = AppWorkflowRunFailureSummary;
+export type WorkflowRunListSummary = AppWorkflowRunListSummary;
 
 export type WorkflowRunStepRecord = {
   stepId: string;
@@ -104,6 +116,28 @@ export type WorkflowRunStepRecord = {
 };
 
 export type WorkflowRunDetail = AppWorkflowRunDetail;
+export type WorkflowRunAttemptRecord = AppWorkflowRunAttemptRecord;
+
+export type WorkflowRunAttemptRow = {
+  id: string;
+  run_id: string;
+  organization_id: string;
+  workflow_id: string;
+  workflow_version_id: string;
+  attempt_number: number;
+  launch_reason: WorkflowRunAttemptLaunchReason;
+  requested_by_user_id: string | null;
+  request_note: string | null;
+  scheduled_for: string;
+  backoff_seconds: number | null;
+  status: WorkflowRunAttemptStatus;
+  failure_code: string | null;
+  failure_message: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
 
 export type ExecutionListFilters = {
   query?: string;
@@ -118,6 +152,13 @@ export type RunCancellationResult = {
   run: WorkflowRunSummary;
   accepted: boolean;
   mode: "immediate" | "cooperative";
+};
+
+export type RunRetryResult = {
+  run: WorkflowRunSummary;
+  accepted: boolean;
+  mode: "manual_retry";
+  attemptNumber: number;
 };
 
 export type ExecutionStepLog = {
@@ -148,6 +189,33 @@ export type WorkflowConditionStepLogData = {
   terminationReason: "condition_not_met" | null;
 };
 
+export type WorkflowActionStepOutput = SupportedActionExecutionOutput;
+
+export type WorkflowActionStepLogData =
+  | {
+      actionType: "send_webhook";
+      status: number;
+      url: string;
+    }
+  | {
+      actionType: "send_email";
+      recipient: string;
+      providerMessageId: string | null;
+    }
+  | {
+      actionType: "create_task";
+      taskId: string;
+      assigneeEmail: string | null;
+    }
+  | {
+      actionType: "update_record_field";
+      recordId: string;
+      recordType: string;
+      recordKey: string;
+      field: string;
+      valueType: WorkflowRecordValueType;
+    };
+
 export type StepExecutionRecordInput = {
   runId: string;
   organizationId: string;
@@ -175,7 +243,13 @@ export type ExecutorClassification = "success" | "retryable_failure" | "fatal_fa
 
 export type ExecutorContext = {
   run: WorkflowRunRow;
+  stepId: string;
   correlationId: string;
+  organizationId: string;
+  workflowId: string;
+  workflowVersionId: string;
+  payload: Record<string, unknown>;
+  sourceContext: WorkflowSourceContext;
 };
 
 export type ExecutorResult = {

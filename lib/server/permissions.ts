@@ -18,7 +18,9 @@ export type PermissionSet = {
   canTriggerWorkflows: boolean;
   canViewStreams: boolean;
   canViewExecutions: boolean;
+  canViewOperations: boolean;
   canCancelRuns: boolean;
+  canRetryRuns: boolean;
   canManageMembers: boolean;
   canCreateInvites: boolean;
   canViewAuditLogs: boolean;
@@ -36,7 +38,9 @@ const PERMISSIONS_BY_ROLE: Record<OrganizationRole, PermissionSet> = {
     canTriggerWorkflows: true,
     canViewStreams: true,
     canViewExecutions: true,
+    canViewOperations: true,
     canCancelRuns: true,
+    canRetryRuns: true,
     canManageMembers: true,
     canCreateInvites: true,
     canViewAuditLogs: true,
@@ -52,7 +56,9 @@ const PERMISSIONS_BY_ROLE: Record<OrganizationRole, PermissionSet> = {
     canTriggerWorkflows: true,
     canViewStreams: true,
     canViewExecutions: true,
+    canViewOperations: true,
     canCancelRuns: true,
+    canRetryRuns: true,
     canManageMembers: false,
     canCreateInvites: false,
     canViewAuditLogs: false,
@@ -68,7 +74,9 @@ const PERMISSIONS_BY_ROLE: Record<OrganizationRole, PermissionSet> = {
     canTriggerWorkflows: true,
     canViewStreams: true,
     canViewExecutions: true,
+    canViewOperations: true,
     canCancelRuns: true,
+    canRetryRuns: true,
     canManageMembers: false,
     canCreateInvites: false,
     canViewAuditLogs: true,
@@ -84,7 +92,9 @@ const PERMISSIONS_BY_ROLE: Record<OrganizationRole, PermissionSet> = {
     canTriggerWorkflows: false,
     canViewStreams: false,
     canViewExecutions: true,
+    canViewOperations: false,
     canCancelRuns: false,
+    canRetryRuns: false,
     canManageMembers: false,
     canCreateInvites: false,
     canViewAuditLogs: false,
@@ -150,8 +160,16 @@ export function canViewExecutions(role: OrganizationRole): boolean {
   return getRolePermissions(role).canViewExecutions;
 }
 
+export function canViewOperations(role: OrganizationRole): boolean {
+  return getRolePermissions(role).canViewOperations;
+}
+
 export function canCancelRuns(role: OrganizationRole): boolean {
   return getRolePermissions(role).canCancelRuns;
+}
+
+export function canRetryRuns(role: OrganizationRole): boolean {
+  return getRolePermissions(role).canRetryRuns;
 }
 
 export function canCreateInvites(role: OrganizationRole): boolean {

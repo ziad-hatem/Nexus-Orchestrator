@@ -5,15 +5,14 @@ import {
   useContext,
   useEffect,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import {
-  DEFAULT_THEME_PREFERENCE,
   THEME_COOKIE_MAX_AGE,
   THEME_COOKIE_NAME,
   THEME_STORAGE_KEY,
   isThemePreference,
-  resolveThemePreference,
   type ResolvedTheme,
   type ThemePreference,
 } from "@/lib/theme";
@@ -24,43 +23,19 @@ type ThemeContextValue = {
   setThemePreference: (preference: ThemePreference) => void;
 };
 
+type ThemeProviderProps = {
+  children: ReactNode;
+  initialThemePreference: ThemePreference;
+  initialResolvedTheme: ResolvedTheme;
+};
+
 const ThemeContext = createContext<ThemeContextValue | null>(null);
-
-function readInitialThemePreference(): ThemePreference {
-  if (typeof document === "undefined") {
-    return DEFAULT_THEME_PREFERENCE;
-  }
-
-  const value = document.documentElement.dataset.themePreference;
-  return isThemePreference(value) ? value : DEFAULT_THEME_PREFERENCE;
-}
-
-function readInitialResolvedTheme(): ResolvedTheme {
-  if (typeof document === "undefined") {
-    return "light";
-  }
-
-  return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
-}
 
 function readSystemResolvedTheme(): ResolvedTheme {
   return typeof window.matchMedia === "function" &&
     window.matchMedia("(prefers-color-scheme: dark)").matches
     ? "dark"
     : "light";
-}
-
-function applyThemePreference(preference: ThemePreference): ResolvedTheme {
-  const prefersDark = readSystemResolvedTheme() === "dark";
-  const resolvedTheme = resolveThemePreference(preference, prefersDark);
-  const root = document.documentElement;
-
-  root.dataset.themePreference = preference;
-  root.dataset.theme = resolvedTheme;
-  root.classList.toggle("dark", resolvedTheme === "dark");
-  root.style.colorScheme = resolvedTheme;
-
-  return resolvedTheme;
 }
 
 function persistThemePreference(preference: ThemePreference): void {
@@ -75,48 +50,80 @@ function persistThemePreference(preference: ThemePreference): void {
   )}; path=/; max-age=${THEME_COOKIE_MAX_AGE}; samesite=lax`;
 }
 
-export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [themePreference, setThemePreferenceState] = useState<ThemePreference>(
-    readInitialThemePreference,
+function syncPersistedThemePreference(preference: ThemePreference): void {
+  let storedPreference: string | null = null;
+
+  try {
+    storedPreference = window.localStorage.getItem(THEME_STORAGE_KEY);
+  } catch {
+    // Ignore storage access failures and rely on cookie persistence below.
+  }
+
+  if (storedPreference !== preference) {
+    persistThemePreference(preference);
+    return;
+  }
+
+  document.cookie = `${THEME_COOKIE_NAME}=${encodeURIComponent(
+    preference,
+  )}; path=/; max-age=${THEME_COOKIE_MAX_AGE}; samesite=lax`;
+}
+
+export function ThemeProvider({
+  children,
+  initialThemePreference,
+  initialResolvedTheme,
+}: ThemeProviderProps) {
+  const [themePreference, setThemePreferenceState] = useState<ThemePreference>(() =>
+    initialThemePreference,
   );
-  const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(
-    readInitialResolvedTheme,
+  const systemResolvedTheme = useSyncExternalStore(
+    (onStoreChange) => {
+      if (typeof window.matchMedia !== "function") {
+        return () => undefined;
+      }
+
+      const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+      mediaQuery.addEventListener("change", onStoreChange);
+
+      return () => {
+        mediaQuery.removeEventListener("change", onStoreChange);
+      };
+    },
+    readSystemResolvedTheme,
+    () => initialResolvedTheme,
   );
+  const resolvedTheme =
+    themePreference === "system" ? systemResolvedTheme : themePreference;
 
   useEffect(() => {
-    const mediaQuery =
-      typeof window.matchMedia === "function"
-        ? window.matchMedia("(prefers-color-scheme: dark)")
-        : null;
+    const root = document.documentElement;
 
-    const handleSystemThemeChange = () => {
-      const currentPreference = readInitialThemePreference();
-      if (currentPreference === "system") {
-        setResolvedTheme(applyThemePreference("system"));
-      }
-    };
+    root.dataset.themePreference = themePreference;
+    root.dataset.theme = resolvedTheme;
+    root.classList.toggle("dark", resolvedTheme === "dark");
+    root.style.colorScheme = resolvedTheme;
+    syncPersistedThemePreference(themePreference);
+  }, [resolvedTheme, themePreference]);
 
+  useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
       if (event.key !== THEME_STORAGE_KEY || !isThemePreference(event.newValue)) {
         return;
       }
 
       setThemePreferenceState(event.newValue);
-      setResolvedTheme(applyThemePreference(event.newValue));
     };
 
-    mediaQuery?.addEventListener("change", handleSystemThemeChange);
     window.addEventListener("storage", handleStorage);
 
     return () => {
-      mediaQuery?.removeEventListener("change", handleSystemThemeChange);
       window.removeEventListener("storage", handleStorage);
     };
   }, []);
 
   const setThemePreference = (preference: ThemePreference) => {
     setThemePreferenceState(preference);
-    setResolvedTheme(applyThemePreference(preference));
     persistThemePreference(preference);
   };
 

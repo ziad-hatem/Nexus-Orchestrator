@@ -51,6 +51,7 @@ export default async function ExecutionDirectoryPage({
       <ExecutionStoreHydrator
         directory={{
           items: result.items,
+          summary: result.summary,
           total: result.total,
           page: result.page,
           pageSize: result.pageSize,
@@ -65,6 +66,7 @@ export default async function ExecutionDirectoryPage({
       <ExecutionDirectory
         orgSlug={orgSlug}
         items={result.items}
+        summary={result.summary}
         total={result.total}
         page={result.page}
         pageSize={result.pageSize}

@@ -21,6 +21,12 @@ type IdempotencyReservation = {
   key: string | null;
 };
 
+type WindowCounterResult = {
+  key: string;
+  current: number;
+  windowSeconds: number;
+};
+
 function getUpstashConfig() {
   return {
     baseUrl: getRequiredEnv("UPSTASH_REDIS_REST_URL").replace(/\/+$/, ""),
@@ -93,6 +99,22 @@ export async function reserveIdempotencyKey(params: {
   return {
     reserved,
     key: params.key,
+  };
+}
+
+export async function incrementWindowCounter(params: {
+  key: string;
+  windowSeconds: number;
+}): Promise<WindowCounterResult> {
+  const payload = await runPipeline([
+    ["INCR", params.key],
+    ["EXPIRE", params.key, params.windowSeconds],
+  ]);
+
+  return {
+    key: params.key,
+    current: Number(payload[0]?.result ?? 0),
+    windowSeconds: params.windowSeconds,
   };
 }
 

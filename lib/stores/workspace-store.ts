@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type {
   AuditLogWithActor,
+  AuditLogSummary,
 } from "@/lib/server/audit-log";
 import type {
   OrganizationMember,
@@ -14,6 +15,7 @@ import type {
   DashboardSummary,
   UserOrganizationMembership,
 } from "@/lib/server/org-service";
+import type { OperationsDashboardData } from "@/lib/server/operations/types";
 import type {
   WorkflowDetail,
   WorkflowDraftState,
@@ -21,6 +23,7 @@ import type {
   WorkflowLifecycleStatus,
   WorkflowPublishedSnapshot,
   WorkflowRunDetail,
+  WorkflowRunListSummary,
   WorkflowRunSummary,
   WorkflowSummary,
   WorkflowTriggerDetails,
@@ -83,6 +86,7 @@ type WorkspaceStoreState = {
   auditPageSize: number;
   auditFilters: AuditFeedFilters;
   auditAvailableActions: string[];
+  auditSummary: AuditLogSummary | null;
   workflowItems: WorkflowSummary[];
   workflowTotal: number;
   workflowPage: number;
@@ -99,11 +103,13 @@ type WorkspaceStoreState = {
   workflowStreamsPage: number;
   workflowStreamsPageSize: number;
   executionItems: WorkflowRunSummary[];
+  executionSummary: WorkflowRunListSummary | null;
   executionTotal: number;
   executionPage: number;
   executionPageSize: number;
   executionFilters: ExecutionDirectoryFilters;
   activeExecutionDetail: WorkflowRunDetail | null;
+  operationsSnapshot: OperationsDashboardData | null;
   setSessionUser: (sessionUser: SessionUserState | null) => void;
   setMemberships: (memberships: UserOrganizationMembership[]) => void;
   setWorkspace: (payload: {
@@ -135,6 +141,7 @@ type WorkspaceStoreState = {
     pageSize: number;
     filters: AuditFeedFilters;
     availableActions: string[];
+    summary: AuditLogSummary;
   }) => void;
   setWorkflowDirectory: (payload: {
     items: WorkflowSummary[];
@@ -157,12 +164,14 @@ type WorkspaceStoreState = {
   }) => void;
   setExecutionDirectory: (payload: {
     items: WorkflowRunSummary[];
+    summary: WorkflowRunListSummary;
     total: number;
     page: number;
     pageSize: number;
     filters: ExecutionDirectoryFilters;
   }) => void;
   setExecutionDetail: (detail: WorkflowRunDetail | null) => void;
+  setOperationsSnapshot: (snapshot: OperationsDashboardData | null) => void;
   clearWorkspace: () => void;
 };
 
@@ -189,6 +198,7 @@ const orgScopedInitialState = {
   auditPageSize: 20,
   auditFilters: emptyAuditFilters,
   auditAvailableActions: [] as string[],
+  auditSummary: null as AuditLogSummary | null,
   workflowItems: [] as WorkflowSummary[],
   workflowTotal: 0,
   workflowPage: 1,
@@ -205,11 +215,13 @@ const orgScopedInitialState = {
   workflowStreamsPage: 1,
   workflowStreamsPageSize: 20,
   executionItems: [] as WorkflowRunSummary[],
+  executionSummary: null as WorkflowRunListSummary | null,
   executionTotal: 0,
   executionPage: 1,
   executionPageSize: 20,
   executionFilters: emptyExecutionFilters,
   activeExecutionDetail: null as WorkflowRunDetail | null,
+  operationsSnapshot: null as OperationsDashboardData | null,
 };
 
 const initialState = {
@@ -336,6 +348,7 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set) => ({
       auditPageSize: payload.pageSize,
       auditFilters: payload.filters,
       auditAvailableActions: payload.availableActions,
+      auditSummary: payload.summary,
     })),
   setWorkflowDirectory: (payload) =>
     set((state) => ({
@@ -392,6 +405,7 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set) => ({
       ...state,
       hydrated: true,
       executionItems: payload.items,
+      executionSummary: payload.summary,
       executionTotal: payload.total,
       executionPage: payload.page,
       executionPageSize: payload.pageSize,
@@ -402,6 +416,12 @@ export const useWorkspaceStore = create<WorkspaceStoreState>((set) => ({
       ...state,
       hydrated: true,
       activeExecutionDetail: detail,
+    })),
+  setOperationsSnapshot: (snapshot) =>
+    set((state) => ({
+      ...state,
+      hydrated: true,
+      operationsSnapshot: snapshot,
     })),
   clearWorkspace: () => ({
     ...initialState,

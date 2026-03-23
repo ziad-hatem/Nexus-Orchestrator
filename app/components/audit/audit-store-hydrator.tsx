@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect } from "react";
-import type { AuditLogWithActor } from "@/lib/server/audit-log";
+import type {
+  AuditLogSummary,
+  AuditLogWithActor,
+} from "@/lib/server/audit-log";
 import { useWorkspaceStore } from "@/lib/stores/workspace-store";
 
 type AuditStoreHydratorProps = {
@@ -14,6 +17,7 @@ type AuditStoreHydratorProps = {
     action?: string;
   };
   availableActions: string[];
+  summary: AuditLogSummary;
 };
 
 export function AuditStoreHydrator({
@@ -23,6 +27,7 @@ export function AuditStoreHydrator({
   pageSize,
   filters,
   availableActions,
+  summary,
 }: AuditStoreHydratorProps) {
   const setAuditFeed = useWorkspaceStore((state) => state.setAuditFeed);
 
@@ -34,6 +39,7 @@ export function AuditStoreHydrator({
       pageSize,
       filters,
       availableActions,
+      summary,
     });
   }, [
     availableActions,
@@ -42,6 +48,7 @@ export function AuditStoreHydrator({
     page,
     pageSize,
     setAuditFeed,
+    summary,
     total,
   ]);
 
