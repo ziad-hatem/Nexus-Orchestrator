@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
 import { cn } from "@/app/components/ui/utils";
+import { Avatar as FacehashAvatar, AvatarImage, AvatarFallback } from "facehash";
 
 type AvatarProps = {
   name?: string | null;
@@ -14,20 +14,6 @@ type AvatarProps = {
   ariaLabel?: string;
 };
 
-function initialsForAvatar(
-  name: string | null | undefined,
-  email: string | null | undefined,
-): string {
-  const source = name?.trim() || email?.split("@")[0] || "U";
-
-  return source
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
-    .join("")
-    .slice(0, 2);
-}
-
 export function Avatar({
   name,
   email,
@@ -38,60 +24,25 @@ export function Avatar({
   textClassName,
   ariaLabel,
 }: AvatarProps) {
-  const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
-  const [loadedImageUrl, setLoadedImageUrl] = useState<string | null>(null);
-  const resolvedImageUrl = useMemo(
-    () => imageUrl?.trim() || null,
-    [imageUrl],
-  );
-
-  const showImage =
-    Boolean(resolvedImageUrl) && failedImageUrl !== resolvedImageUrl;
-  const isLoaded = loadedImageUrl === resolvedImageUrl;
+  const seedName = name || email || "default_user";
 
   return (
-    <div
+    <FacehashAvatar
       aria-label={ariaLabel}
       className={cn(
         "relative flex shrink-0 items-center justify-center overflow-hidden",
         className,
       )}
-      role={ariaLabel ? "img" : undefined}
     >
-      <div
-        className={cn(
-          "absolute inset-0 flex items-center justify-center",
-          fallbackClassName,
-        )}
-      >
-        <span className={textClassName}>
-          {initialsForAvatar(name, email)}
-        </span>
-      </div>
-
-      {showImage ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          key={resolvedImageUrl}
-          alt=""
-          aria-hidden="true"
-          className={cn(
-            "absolute inset-0 h-full w-full object-cover transition-opacity duration-200",
-            isLoaded ? "opacity-100" : "opacity-0",
-            imageClassName,
-          )}
-          loading="eager"
-          referrerPolicy="no-referrer"
-          src={resolvedImageUrl ?? undefined}
-          onError={() => {
-            setFailedImageUrl(resolvedImageUrl);
-            setLoadedImageUrl(null);
-          }}
-          onLoad={() => {
-            setLoadedImageUrl(resolvedImageUrl);
-          }}
-        />
-      ) : null}
-    </div>
+      <AvatarImage
+        src={imageUrl || undefined}
+        alt={seedName}
+        className={cn("h-full w-full object-cover", imageClassName)}
+      />
+      <AvatarFallback
+        name={seedName}
+        className={cn("h-full w-full", fallbackClassName)}
+      />
+    </FacehashAvatar>
   );
 }
