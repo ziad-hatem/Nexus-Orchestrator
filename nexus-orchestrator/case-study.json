@@ -1,0 +1,212 @@
+{
+  "slug": "nexus-orchestrator",
+  "indexCode": null,
+  "name": "Nexus Orchestrator",
+  "status": "in-development",
+  "shippedDate": "2026-04",
+  "domain": null,
+  "liveUrl": "#",
+  "lighthouseScore": 98,
+  "heroDeemphasis": "— a multi-tenant workflow-automation platform for building, triggering, and monitoring automations end to end.",
+  "liveCtaLabel": "View source on GitHub",
+  "overview": "Nexus Orchestrator is a multi-tenant workflow-automation platform (Zapier/n8n-style): organizations build workflows, wire them to webhook triggers and conditional branches, run them through a queued execution engine backed by a standalone worker process, and monitor runs through an audit log and operations dashboard.",
+  "contextParagraphs": [
+    "Built solo over roughly two weeks (first commit 2026-03, most recent 2026-04) across 26 commits, the codebase is organized into eight sequential build phases — auth/orgs, workflow CRUD, trigger ingestion, execution engine, condition evaluation, action execution, observability/recovery, and audit/security hardening — each shipped with its own dedicated test suite before the next began.",
+    "The app pairs a Next.js 16 (App Router, Turbopack) frontend with a Supabase/Postgres data layer (raw `pg` client against hand-written SQL migration files, not an ORM), a separate long-running worker process (`worker/main.ts`) that drains the execution queue, and Sentry-based observability wired through a recursive redaction layer so secrets never reach third-party logging or the audit trail."
+  ],
+  "nextSlug": null,
+  "nextLabel": null,
+  "sourceUrl": "https://github.com/ziad-hatem/Nexus-Orchestrator",
+  "roleRows": [
+    {
+      "tag": "R-01",
+      "text": "Built the multi-tenant org/auth system: NextAuth session handling, WebAuthn passkey registration/authentication/listing/deletion, invites, membership roles, and per-org audit logging."
+    },
+    {
+      "tag": "R-02",
+      "text": "Designed and implemented the workflow engine: workflow CRUD and versioning, webhook trigger ingestion with rate limiting, a condition evaluator/resolver, and pluggable action executors (email via Resend, outbound webhooks)."
+    },
+    {
+      "tag": "R-03",
+      "text": "Built the execution runtime: a Postgres-backed execution queue, a standalone worker process with polling/heartbeat and retry backoff, and an operations dashboard surfacing queue backlog and stale-run alerts."
+    },
+    {
+      "tag": "R-04",
+      "text": "Hardened the system for production readiness: recursive secret redaction across Sentry events and audit logs, webhook payload-size guarding, retention-policy pruning scripts, and a 54-file automated test suite spanning all eight build phases plus dedicated security/operations suites."
+    }
+  ],
+  "technologies": [
+    "Next.js 16 (App Router, Turbopack)",
+    "React 19 / TypeScript 5",
+    "Tailwind CSS 4",
+    "NextAuth (Auth.js) v5 beta + next-passkey-webauthn (WebAuthn/passkeys)",
+    "Supabase (Postgres + auth backend) + raw pg client with hand-written SQL migrations",
+    "@sentry/nextjs for error monitoring, wired through a custom redaction layer",
+    "Resend + @react-email/components for transactional email",
+    "Zustand (state) + Zod (validation)",
+    "Radix UI primitives + class-variance-authority + tailwind-merge (shadcn/ui-style component layer)",
+    "@xyflow/react (workflow node/flow-graph UI)",
+    "@react-three/fiber + drei + three.js (3D/WebGL marketing page)",
+    "motion (animation)",
+    "pino (structured logging)",
+    "tsx (runs the worker process and the test suite via Node's built-in test runner)"
+  ],
+  "measuredQuality": {
+    "a11ySummary": "Baseline a11y tooling and manual ARIA usage, not independently audited",
+    "a11yDetail": "eslint-plugin-jsx-a11y runs as part of eslint-config-next's lint rules. A dedicated app/components/a11y/ directory includes a route-announcer (aria-live=\"polite\", aria-atomic=\"true\") for client-side navigation and a form-status-message component. 67 aria-*/role= attributes were found across 23 component files. No axe-core or pa11y automated accessibility tests exist. A Lighthouse accessibility audit against the production build separately scored 96/100 on both desktop and mobile, corroborating the manual ARIA usage.",
+    "checkedDate": "2026-07-07"
+  },
+  "resultsParagraph": "Nexus Orchestrator has not been deployed publicly and has no production traffic or users, so there are no adoption, conversion, or reliability numbers to report. What is verifiable: a 54-file automated test suite (Node's built-in test runner via `tsx --test`) covering all eight build phases plus dedicated security and operations suites, and a documented production-readiness checklist covering environment configuration, audit coverage, webhook security, and data-retention policy. A Lighthouse run against a real production build (`npm run build && npm run start`, with a proper NEXTAUTH_SECRET configured) of the local, unauthenticated landing page scored 98/100 desktop performance and 79/100 mobile performance — see _performance for full Core Web Vitals and category breakdowns. This is a real measurement of the current codebase, not the earlier dev-server approximation.",
+  "heroTail": "built solo, phase by phase, with a test suite gating every phase before the next began.",
+  "architectureDecisions": [
+    {
+      "index": "A-01",
+      "title": "Manual compensating rollback instead of a DB transaction for org creation",
+      "body": "the trade-off was writing an explicit rollback step (delete the just-inserted organization row) inside a catch block if the follow-up membership insert or audit-log write fails, instead of relying on a real multi-table transaction — worth it because Supabase's client SDK doesn't give cross-table transactional guarantees, and the alternative was risking an orphaned organization with no owning member.",
+      "thumbCaption": "lib/server/org-service.ts — createOrganizationForUser"
+    },
+    {
+      "index": "A-02",
+      "title": "Recursive key-based redaction before any log or event leaves the app",
+      "body": "the trade-off was adding a recursive-scan redaction pass (checking every nested object key against sensitive-name patterns: authorization, api_key, token, secret, password, cookie, session, etc.) to every Sentry event/breadcrumb and audit-log write — worth it because it's the only guard against secrets or PII leaking into third-party tooling or the persisted audit trail, which the production-readiness checklist explicitly requires verifying before launch.",
+      "thumbCaption": "lib/observability/redaction.ts, wired via sentry.server.config.ts / sentry.edge.config.ts"
+    },
+    {
+      "index": "A-03",
+      "title": "Sentry error reporting tunneled through a same-origin rewrite",
+      "body": "the trade-off was routing all browser-side Sentry traffic through a same-origin proxy instead of calling sentry.io directly — a choice the code comment itself flags as something that 'can increase your server load as well as your hosting bill' — worth it because ad-blockers otherwise silently drop client-side error reports, so this is the only reliable way to capture real user errors.",
+      "thumbCaption": "next.config.ts"
+    },
+    {
+      "index": "A-04",
+      "title": "Double body-size check on inbound webhooks",
+      "body": "the trade-off was checking the payload size twice — once cheaply against the declared Content-Length header, then again against the actual byte length after reading the full body — worth it because a spoofed or missing Content-Length header would otherwise let an oversized payload slip past the first, cheaper check.",
+      "thumbCaption": "app/hooks/[...path]/route.ts"
+    },
+    {
+      "index": "A-05",
+      "title": "Block self-service deletion for a sole org admin",
+      "body": "the trade-off was adding friction to account deletion — blocking it outright with a 409 telling the user to assign another admin first — worth it because letting the last admin delete their account would leave an organization with no one able to manage members, billing, or settings.",
+      "thumbCaption": "app/api/me/account/route.ts"
+    }
+  ],
+  "testing": {
+    "unitTestCount": 54,
+    "e2eTestCount": 0,
+    "ciSummary": "No CI pipeline is configured — no .github/workflows directory or equivalent config exists in this repo; the full suite (`npm run test`) must be run locally.",
+    "pipelineSteps": []
+  },
+  "retrospective": "DRAFT — for the portfolio owner's own words. This project stress-tests how far a solo, phase-gated build process can go in about two weeks: each of the eight phases shipped with its own test suite before the next began, which kept regressions contained but also meant earlier phases (auth, org/RBAC) got revisited by later phases' security hardening rather than built with every requirement known upfront. The most honest gap ahead of any real deployment: there's no CI, so the 54-test suite is only as trustworthy as remembering to run it locally before each commit; and the app has never been deployed to a real environment or exercised under real traffic — the 98/100 desktop Lighthouse score is a clean local production-build measurement, not evidence of how it holds up in production.",
+  "_needsInput": [
+    {
+      "field": "indexCode",
+      "reason": "depends on ziadhatem.dev's existing case-study sequence"
+    },
+    {
+      "field": "nextSlug/nextLabel",
+      "reason": "depends on which other case study should follow this one"
+    },
+    {
+      "field": "domain",
+      "reason": "no live deployment exists; no custom domain, package.json homepage, or CNAME file found anywhere in the repo"
+    },
+    {
+      "field": "shippedDate",
+      "reason": "status is in-development, so there is no real ship date — used the last commit month (2026-04) as the closest verifiable proxy; confirm/update if this has since shipped"
+    },
+    {
+      "field": "liveCtaLabel",
+      "reason": "no live site exists to link to; defaulted to a source-link label pointing at sourceUrl instead — override once/if a live URL exists"
+    },
+    {
+      "field": "roleRows/contributors",
+      "reason": "RESOLVED on recheck: git log --format=\"%an <%ae>\" confirms both author identities (\"Ziad Hatem\", 25 commits; \"ziad-hatem\", 1 commit) share the exact same email, ziadhatem2022@gmail.com — almost certainly one person under two git configs. Reported as solo work; flagging only so the portfolio owner can give final confirmation."
+    }
+  ],
+  "_evidence": {
+    "shippedDate": "git log --reverse --format=%ad --date=format:%Y-%m -> first commit 2026-03; git log -1 --format=%ad --date=format:%Y-%m -> last commit 2026-04; 26 total commits (git log --oneline | wc -l)",
+    "name": "package.json \"name\" is \"nexus_orchestrator\" (snake_case, no display-name field); display name \"Nexus Orchestrator\" is corroborated by .env.example's PASSKEY_RP_NAME=\"Nexus Orchestrator\" and RESEND_FROM_EMAIL=\"Nexus Orchestrator <onboarding@resend.dev>\"",
+    "status/liveUrl/domain": "No .github/workflows, no Dockerfile/netlify.toml/CNAME, no package.json homepage field, README.md is unmodified create-next-app boilerplate with no live-URL claim; vercel.json only configures a cron route, not proof of a live deployment; .env.example defaults every URL var to localhost and leaves all production secrets blank",
+    "technologies": "package.json dependencies/devDependencies (full file read); no tailwind.config.* (Tailwind v4 uses postcss.config.mjs's @tailwindcss/postcss plugin instead); db/ contains 11 hand-written .sql schema files (no Prisma/Drizzle config found)",
+    "testing.unitTestCount": "Glob **/*.test.* under tests/ = 54 files across tests/security, tests/operations, and tests/phase-one through tests/phase-eight; run via `tsx --test` per package.json scripts",
+    "testing.e2eTestCount": "0 — no e2e/, cypress/, or playwright/ directories or files found anywhere in the repo",
+    "lighthouseScore": "Superseded the earlier dev-mode run. Set a real .env (generated NEXTAUTH_SECRET via crypto.randomBytes, left Supabase/Sentry/Resend/Upstash blank since the unauthenticated landing page never calls them), ran npm run build (production build succeeded clean) then npm run start on port 3100. Ran npx lighthouse http://localhost:3100/ --preset=desktop (full default category set, not --only-categories) and again without --preset for mobile. Desktop: performance 98, accessibility 96, best-practices 96, seo 100, LCP 1.1s, CLS 0, TBT 0ms, FCP 0.3s, Speed Index 0.5s. Mobile: performance 79, accessibility 96, best-practices 96, seo 100, LCP 4.9s, CLS 0.032, TBT 190ms, FCP 1.1s, Speed Index 1.1s. Raw reports saved at lighthouse/desktop-report.json and lighthouse/mobile-report.json.",
+    "architectureDecisions": "A-01: lib/server/org-service.ts lines ~168-232 (createOrganizationForUser try/catch + rollbackOrganizationCreation), corroborated by commit referencing rollback-on-audit-log-failure. A-02: lib/observability/redaction.ts + sentry.server.config.ts/sentry.edge.config.ts (sendDefaultPii: false, beforeSend/beforeBreadcrumb -> redactSentryEventLike); required by docs/production-readiness-checklist.md's Webhook Security section. A-03: next.config.ts comment on the Sentry tunnel route. A-04: app/hooks/[...path]/route.ts, two sequential size checks against WEBHOOK_MAX_BODY_BYTES. A-05: app/api/me/account/route.ts, per-org admin count check returning 409.",
+    "measuredQuality.a11yDetail": "eslint-plugin-jsx-a11y confirmed as a transitive dependency via package-lock.json (pulled in by eslint-config-next); app/components/a11y/route-announcer.tsx and form-status-message.tsx read directly; grep for aria-/role= across .tsx files returned 67 matches in 23 files"
+  },
+  "_performance": {
+    "desktop": {
+      "performance": 98,
+      "accessibility": 96,
+      "bestPractices": 96,
+      "seo": 100,
+      "lcp": "1.1 s",
+      "cls": "0",
+      "tbt": "0 ms",
+      "fcp": "0.3 s",
+      "speedIndex": "0.5 s"
+    },
+    "mobile": {
+      "performance": 79,
+      "accessibility": 96,
+      "bestPractices": 96,
+      "seo": 100,
+      "lcp": "4.9 s",
+      "cls": "0.032",
+      "tbt": "190 ms",
+      "fcp": "1.1 s",
+      "speedIndex": "1.1 s"
+    }
+  },
+  "_screenshots": [
+    {
+      "file": "screenshots/hero-desktop.png",
+      "alt": "Nexus Orchestrator marketing landing page on desktop: hero headline \"Architecting the Future of Nexus Orchestrator\", trust-logo strip, three feature cards (Multi-Tenant Isolation, Visual Workflow Builder, Enterprise-Grade Security), stats section, testimonial quote, and closing CTA",
+      "width": 1440,
+      "height": 4950,
+      "for": "hero"
+    },
+    {
+      "file": "screenshots/hero-mobile.png",
+      "alt": "Same Nexus Orchestrator landing page reflowed to a 390px-wide mobile viewport, single-column stacked layout",
+      "width": 390,
+      "height": 7145,
+      "for": "hero-mobile"
+    },
+    {
+      "file": "screenshots/A-01-org-create-rollback.png",
+      "alt": "Live register page (/register), \"Workspace setup\" step: an \"Organization Name\" text field with placeholder \"Acme Corp\" and helper text \"This becomes your team workspace and the home for your first workflows, runs, and audit history\" — the public UI that ultimately calls createOrganizationForUser",
+      "width": 1024,
+      "height": 805,
+      "for": "architectureDecisions[A-01]"
+    },
+    {
+      "file": "screenshots/A-02-sentry-redaction.png",
+      "alt": "Code excerpt from lib/observability/redaction.ts showing the redactSentryEventLike function that strips request/extra/contexts/breadcrumbs/user fields before a Sentry event is sent",
+      "width": 1024,
+      "height": 719,
+      "for": "architectureDecisions[A-02]"
+    },
+    {
+      "file": "screenshots/A-03-sentry-tunnel.png",
+      "alt": "Code excerpt from next.config.ts showing the withSentryConfig call and its tunnelRoute: \"/monitoring\" option with the accompanying cost-tradeoff comment",
+      "width": 1024,
+      "height": 920,
+      "for": "architectureDecisions[A-03]"
+    },
+    {
+      "file": "screenshots/A-04-webhook-body-size.png",
+      "alt": "Code excerpt from app/hooks/[...path]/route.ts showing the two sequential webhook payload-size checks (declared Content-Length, then actual byte length)",
+      "width": 1024,
+      "height": 786,
+      "for": "architectureDecisions[A-04]"
+    },
+    {
+      "file": "screenshots/A-05-sole-admin-guard.png",
+      "alt": "Code excerpt from app/api/me/account/route.ts showing the per-organization admin-count loop that returns a 409 when the requesting user is the sole active admin",
+      "width": 1074,
+      "height": 853,
+      "for": "architectureDecisions[A-05]"
+    }
+  ]
+}

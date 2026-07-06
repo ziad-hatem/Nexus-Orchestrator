@@ -16,7 +16,7 @@ Disallow: /reset-password
 Disallow: /verify
 
 # Host
-Host: http://localhost:3000
+Host: http://localhost:3100
 
 # Sitemaps
-Sitemap: http://localhost:3000/sitemap.xml
+Sitemap: http://localhost:3100/sitemap.xml

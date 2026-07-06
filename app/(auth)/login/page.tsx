@@ -389,17 +389,19 @@ function LoginPageContent() {
     }
   };
 
-  const handlePasswordSignIn = async (event: React.FormEvent) => {
-    event.preventDefault();
+  const performPasswordSignIn = async (
+    emailValue: string,
+    passwordValue: string,
+  ) => {
     setError("");
     setLoading(true);
 
     try {
-      const nextEmail = normalizeEmail(email);
+      const nextEmail = normalizeEmail(emailValue);
       const { data, error: supabaseError } =
         await supabase.auth.signInWithPassword({
           email: nextEmail,
-          password,
+          password: passwordValue,
         });
 
       if (supabaseError || !data.user) {
@@ -424,6 +426,23 @@ function LoginPageContent() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handlePasswordSignIn = async (event: React.FormEvent) => {
+    event.preventDefault();
+    await performPasswordSignIn(email, password);
+  };
+
+  const demoEmail = process.env.NEXT_PUBLIC_DEMO_EMAIL;
+  const demoPassword = process.env.NEXT_PUBLIC_DEMO_PASSWORD;
+
+  const handleDemoSignIn = async () => {
+    if (!demoEmail || !demoPassword) {
+      return;
+    }
+    setEmail(demoEmail);
+    setPassword(demoPassword);
+    await performPasswordSignIn(demoEmail, demoPassword);
   };
 
   const handleVerifyMfaCode = async () => {
@@ -798,6 +817,25 @@ function LoginPageContent() {
               )}
             </Button>
           </form>
+
+          {demoEmail && demoPassword ? (
+            <div className="tonal-divider mt-6 pt-6 text-center">
+              <p className="text-xs text-[var(--on-surface-variant)]">
+                Just exploring? Sign in with the live demo account.
+              </p>
+              <button
+                type="button"
+                onClick={() => void handleDemoSignIn()}
+                disabled={disableLoginActions}
+                className="mt-2 text-xs font-semibold text-primary transition-colors hover:text-[var(--primary-container)]"
+              >
+                Use demo credentials ({demoEmail})
+              </button>
+              <p className="mt-1 text-[10px] text-[var(--on-surface-variant)]">
+                Demo data resets every hour.
+              </p>
+            </div>
+          ) : null}
 
           {showMagicLinkOption || showPasskeyOption ? (
             <div className="tonal-divider mt-8 flex flex-col gap-4 pt-6">

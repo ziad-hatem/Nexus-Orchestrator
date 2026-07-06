@@ -1,0 +1,51 @@
+[
+  {
+    "file": "screenshots/hero-desktop.png",
+    "alt": "Nexus Orchestrator marketing landing page on desktop: hero headline \"Architecting the Future of Nexus Orchestrator\", trust-logo strip, three feature cards (Multi-Tenant Isolation, Visual Workflow Builder, Enterprise-Grade Security), stats section, testimonial quote, and closing CTA",
+    "width": 1440,
+    "height": 4950,
+    "for": "hero"
+  },
+  {
+    "file": "screenshots/hero-mobile.png",
+    "alt": "Same Nexus Orchestrator landing page reflowed to a 390px-wide mobile viewport, single-column stacked layout",
+    "width": 390,
+    "height": 7145,
+    "for": "hero-mobile"
+  },
+  {
+    "file": "screenshots/A-01-org-create-rollback.png",
+    "alt": "Live register page (/register), \"Workspace setup\" step: an \"Organization Name\" text field with placeholder \"Acme Corp\" and helper text \"This becomes your team workspace and the home for your first workflows, runs, and audit history\" — the public UI that ultimately calls createOrganizationForUser",
+    "width": 1024,
+    "height": 805,
+    "for": "architectureDecisions[A-01]"
+  },
+  {
+    "file": "screenshots/A-02-sentry-redaction.png",
+    "alt": "Code excerpt from lib/observability/redaction.ts showing the redactSentryEventLike function that strips request/extra/contexts/breadcrumbs/user fields before a Sentry event is sent",
+    "width": 1024,
+    "height": 719,
+    "for": "architectureDecisions[A-02]"
+  },
+  {
+    "file": "screenshots/A-03-sentry-tunnel.png",
+    "alt": "Code excerpt from next.config.ts showing the withSentryConfig call and its tunnelRoute: \"/monitoring\" option with the accompanying cost-tradeoff comment",
+    "width": 1024,
+    "height": 920,
+    "for": "architectureDecisions[A-03]"
+  },
+  {
+    "file": "screenshots/A-04-webhook-body-size.png",
+    "alt": "Code excerpt from app/hooks/[...path]/route.ts showing the two sequential webhook payload-size checks (declared Content-Length, then actual byte length)",
+    "width": 1024,
+    "height": 786,
+    "for": "architectureDecisions[A-04]"
+  },
+  {
+    "file": "screenshots/A-05-sole-admin-guard.png",
+    "alt": "Code excerpt from app/api/me/account/route.ts showing the per-organization admin-count loop that returns a 409 when the requesting user is the sole active admin",
+    "width": 1074,
+    "height": 853,
+    "for": "architectureDecisions[A-05]"
+  }
+]
