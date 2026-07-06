@@ -1,8 +1,16 @@
 {
   "crons": [
     {
+      "path": "/api/internal/worker/drain",
+      "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/internal/events",
+      "schedule": "0 1 * * *"
+    },
+    {
       "path": "/api/internal/demo/reset",
-      "schedule": "0 * * * *"
+      "schedule": "0 1 * * *"
     }
   ]
 }
